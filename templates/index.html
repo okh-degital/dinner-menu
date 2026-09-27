@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>今週の夕飯</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f7f5ef; color: #29382c; font-family: system-ui, sans-serif; line-height: 1.8; }
+    main { max-width: 960px; margin: auto; padding: 28px 18px 48px; }
+    h1 { margin-bottom: 8px; font-size: 2rem; }
+    h2 { margin: 8px 0 18px; font-size: 1.4rem; }
+    h3 { margin: 18px 0 4px; font-size: 1rem; }
+    p { margin: 8px 0; }
+    .note { color: #5b655d; }
+    .meals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 18px; margin: 24px 0; }
+    article, .shopping { padding: 24px; background: white; border: 1px solid #dde3d8; border-radius: 16px; }
+    .day { display: inline-block; background: #e7efdd; padding: 2px 12px; border-radius: 20px; font-weight: bold; }
+    ul, ol { padding-left: 1.5em; margin-top: 6px; }
+    .checklist { list-style: none; padding: 0; }
+    .checklist label { display: flex; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; }
+    input[type="checkbox"] { width: 22px; height: 22px; flex-shrink: 0; accent-color: #486b39; }
+    input:checked + span { text-decoration: line-through; color: #757575; }
+    button { background: #fff; color: #29382c; border: 1px solid #87977d; border-radius: 8px; padding: 12px 18px; font: inherit; cursor: pointer; }
+    :focus-visible { outline: 3px solid #476e34; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>今週の夕飯</h1>
+    <p class="note">動作確認用の仮献立・3人分です。ご飯や副菜は含みません。</p>
+    <section class="meals" aria-label="曜日ごとの献立">
+      $meal_cards
+    </section>
+    <section class="shopping" aria-labelledby="shopping-heading">
+      <h2 id="shopping-heading">買い物リスト</h2>
+      <p class="note">4日分の材料を合計しています。調味料も含むので、家にあるものはチェックしてください。</p>
+      <ul class="checklist">
+        $shopping_items
+      </ul>
+      <button type="button" id="reset">チェックをすべて外す</button>
+      <p class="note" id="save-status" role="status">チェックはこの端末・ブラウザに保存します。</p>
+      <noscript>チェックの保存にはJavaScriptを有効にしてください。</noscript>
+    </section>
+  </main>
+  <script>
+    const boxes = Array.from(document.querySelectorAll('.checklist input'));
+    // 献立や数量が変わったときは、以前のチェックを引き継がない。
+    const signature = document.querySelector('.meals').textContent.replace(/\s+/g, ' ').trim()
+      + JSON.stringify(boxes.map(box => box.dataset.key));
+    const storageKey = 'dinner-shopping-v1:' + signature;
+    const status = document.getElementById('save-status');
+    function storageWarning() {
+      status.textContent = 'このブラウザではチェックを保存できません。ページを閉じるとリセットされます。';
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      if (saved && typeof saved === 'object') {
+        boxes.forEach(box => { box.checked = saved[box.dataset.key] === true; });
+      }
+    } catch (error) { storageWarning(); }
+    function save() {
+      try {
+        const state = Object.fromEntries(boxes.map(box => [box.dataset.key, box.checked]));
+        localStorage.setItem(storageKey, JSON.stringify(state));
+      } catch (error) { storageWarning(); }
+    }
+    boxes.forEach(box => box.addEventListener('change', save));
+    document.getElementById('reset').addEventListener('click', () => {
+      boxes.forEach(box => { box.checked = false; });
+      save();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>今週の夕飯</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f7f5ef; color: #29382c; font-family: system-ui, sans-serif; line-height: 1.8; }
+    main { max-width: 960px; margin: auto; padding: 28px 18px 48px; }
+    h1 { margin-bottom: 8px; font-size: 2rem; }
+    h2 { margin: 8px 0 18px; font-size: 1.4rem; }
+    h3 { margin: 18px 0 4px; font-size: 1rem; }
+    p { margin: 8px 0; }
+    .note { color: #5b655d; }
+    .meals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 18px; margin: 24px 0; }
+    article, .shopping { padding: 24px; background: white; border: 1px solid #dde3d8; border-radius: 16px; }
+    .day { display: inline-block; background: #e7efdd; padding: 2px 12px; border-radius: 20px; font-weight: bold; }
+    ul, ol { padding-left: 1.5em; margin-top: 6px; }
+    .checklist { list-style: none; padding: 0; }
+    .checklist label { display: flex; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; }
+    input[type="checkbox"] { width: 22px; height: 22px; flex-shrink: 0; accent-color: #486b39; }
+    input:checked + span { text-decoration: line-through; color: #757575; }
+    button { background: #fff; color: #29382c; border: 1px solid #87977d; border-radius: 8px; padding: 12px 18px; font: inherit; cursor: pointer; }
+    :focus-visible { outline: 3px solid #476e34; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>今週の夕飯</h1>
+    <p class="note">動作確認用の仮献立・3人分です。ご飯や副菜は含みません。</p>
+    <section class="meals" aria-label="曜日ごとの献立">
+      <article><span class="day">月曜日</span><h2>豚の生姜焼き</h2><h3>材料（3人分）</h3><ul><li>豚薄切り肉：300g</li><li>玉ねぎ：1.5個</li><li>しょうゆ：1.5大さじ</li><li>みりん：1.5大さじ</li><li>しょうが：1.5小さじ</li><li>油：1.5小さじ</li></ul><h3>作り方</h3><ol><li>玉ねぎを薄切りにする。</li><li>フライパンに油を熱し、豚肉と玉ねぎを炒める。</li><li>肉にしっかり火が通ったら、しょうゆ・みりん・しょうがを加えてからめる。</li></ol></article>
+<article><span class="day">火曜日</span><h2>豆腐とひき肉の甘辛炒め</h2><h3>材料（3人分）</h3><ul><li>木綿豆腐：1.5丁</li><li>豚ひき肉：225g</li><li>しょうゆ：1.5大さじ</li><li>みりん：1.5大さじ</li><li>油：1.5小さじ</li></ul><h3>作り方</h3><ol><li>豆腐の水気を切り、一口大に切る。</li><li>油を熱し、ひき肉をほぐしながら十分に炒める。</li><li>豆腐・しょうゆ・みりんを加え、豆腐が温まるまで炒め合わせる。</li></ol></article>
+<article><span class="day">水曜日</span><h2>鮭ときのこの蒸し焼き</h2><h3>材料（3人分）</h3><ul><li>生鮭：3切れ</li><li>しめじ：1.5袋</li><li>玉ねぎ：1.5個</li><li>酒：3大さじ</li><li>しょうゆ：1.5大さじ</li></ul><h3>作り方</h3><ol><li>玉ねぎを薄切りにし、しめじをほぐす。</li><li>フライパンに野菜と鮭を入れ、酒をふってふたをする。</li><li>弱めの中火で蒸し焼きにし、鮭の中心まで火が通ったらしょうゆをかける。</li></ol></article>
+<article><span class="day">金曜日</span><h2>チキンカレー</h2><h3>材料（3人分）</h3><ul><li>鶏もも肉：300g</li><li>玉ねぎ：1.5個</li><li>にんじん：1.5本</li><li>じゃがいも：1.5個</li><li>カレールウ：3皿分</li><li>油：1.5小さじ</li></ul><h3>作り方</h3><ol><li>肉と野菜を食べやすい大きさに切る。</li><li>鍋に油を熱して肉と野菜を炒め、ルウの表示に合わせた量の水を加える。</li><li>肉に十分火が通り、野菜が柔らかくなるまで煮る。火を止めてルウを溶かし、再び弱火で煮る。</li></ol></article>
+    </section>
+    <section class="shopping" aria-labelledby="shopping-heading">
+      <h2 id="shopping-heading">買い物リスト</h2>
+      <p class="note">4日分の材料を合計しています。調味料も含むので、家にあるものはチェックしてください。</p>
+      <ul class="checklist">
+        <li><label><input type="checkbox" data-key="豚薄切り肉|300.0|g"><span>豚薄切り肉：300g</span></label></li>
+<li><label><input type="checkbox" data-key="玉ねぎ|4.5|個"><span>玉ねぎ：4.5個</span></label></li>
+<li><label><input type="checkbox" data-key="しょうゆ|4.5|大さじ"><span>しょうゆ：4.5大さじ</span></label></li>
+<li><label><input type="checkbox" data-key="みりん|3.0|大さじ"><span>みりん：3大さじ</span></label></li>
+<li><label><input type="checkbox" data-key="しょうが|1.5|小さじ"><span>しょうが：1.5小さじ</span></label></li>
+<li><label><input type="checkbox" data-key="油|4.5|小さじ"><span>油：4.5小さじ</span></label></li>
+<li><label><input type="checkbox" data-key="木綿豆腐|1.5|丁"><span>木綿豆腐：1.5丁</span></label></li>
+<li><label><input type="checkbox" data-key="豚ひき肉|225.0|g"><span>豚ひき肉：225g</span></label></li>
+<li><label><input type="checkbox" data-key="生鮭|3.0|切れ"><span>生鮭：3切れ</span></label></li>
+<li><label><input type="checkbox" data-key="しめじ|1.5|袋"><span>しめじ：1.5袋</span></label></li>
+<li><label><input type="checkbox" data-key="酒|3.0|大さじ"><span>酒：3大さじ</span></label></li>
+<li><label><input type="checkbox" data-key="鶏もも肉|300.0|g"><span>鶏もも肉：300g</span></label></li>
+<li><label><input type="checkbox" data-key="にんじん|1.5|本"><span>にんじん：1.5本</span></label></li>
+<li><label><input type="checkbox" data-key="じゃがいも|1.5|個"><span>じゃがいも：1.5個</span></label></li>
+<li><label><input type="checkbox" data-key="カレールウ|3.0|皿分"><span>カレールウ：3皿分</span></label></li>
+      </ul>
+      <button type="button" id="reset">チェックをすべて外す</button>
+      <p class="note" id="save-status" role="status">チェックはこの端末・ブラウザに保存します。</p>
+      <noscript>チェックの保存にはJavaScriptを有効にしてください。</noscript>
+    </section>
+  </main>
+  <script>
+    const boxes = Array.from(document.querySelectorAll('.checklist input'));
+    // 献立や数量が変わったときは、以前のチェックを引き継がない。
+    const signature = document.querySelector('.meals').textContent.replace(/\s+/g, ' ').trim()
+      + JSON.stringify(boxes.map(box => box.dataset.key));
+    const storageKey = 'dinner-shopping-v1:' + signature;
+    const status = document.getElementById('save-status');
+    function storageWarning() {
+      status.textContent = 'このブラウザではチェックを保存できません。ページを閉じるとリセットされます。';
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      if (saved && typeof saved === 'object') {
+        boxes.forEach(box => { box.checked = saved[box.dataset.key] === true; });
+      }
+    } catch (error) { storageWarning(); }
+    function save() {
+      try {
+        const state = Object.fromEntries(boxes.map(box => [box.dataset.key, box.checked]));
+        localStorage.setItem(storageKey, JSON.stringify(state));
+      } catch (error) { storageWarning(); }
+    }
+    boxes.forEach(box => box.addEventListener('change', save));
+    document.getElementById('reset').addEventListener('click', () => {
+      boxes.forEach(box => { box.checked = false; });
+      save();
+    });
+  </script>
+</body>
+</html>
