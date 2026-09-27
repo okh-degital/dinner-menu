@@ -1,6 +1,7 @@
 """仮の献立から夕飯ページを生成する最小版（外部ライブラリ不要）。"""
 
 import json
+import argparse
 from collections import defaultdict
 from html import escape
 from pathlib import Path
@@ -84,9 +85,16 @@ def generate_page(base_dir=BASE_DIR):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="夕飯ページを生成")
+    parser.add_argument("--weekly", action="store_true", help="確認済み分量から実レシピの献立プレビューを生成")
+    args = parser.parse_args()
+    if args.weekly:
+        from build_shopping import main as build_weekly
+        return build_weekly()
     output_path = generate_page()
     print(f"夕飯ページを生成しました: {output_path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

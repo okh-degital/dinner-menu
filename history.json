@@ -1,1 +1,30 @@
-[]
+[
+  {
+    "date": "2026-09-28",
+    "source": "rakuten_recipe",
+    "recipe_id": "1050010995",
+    "title": "プロ直伝！ニラともやしの卵炒め",
+    "status": "planned"
+  },
+  {
+    "date": "2026-09-29",
+    "source": "rakuten_recipe",
+    "recipe_id": "1390032207",
+    "title": "手抜きでも簡単美味しい！ぷりぷり海老マヨ！！！",
+    "status": "planned"
+  },
+  {
+    "date": "2026-09-30",
+    "source": "rakuten_recipe",
+    "recipe_id": "1510019632",
+    "title": "★鶏ムネ肉の柔らか甘辛チキン★",
+    "status": "planned"
+  },
+  {
+    "date": "2026-10-02",
+    "source": "rakuten_recipe",
+    "recipe_id": "1670008437",
+    "title": "水切りなし♡豆腐でボリューム♡ふわふわ鶏つくね",
+    "status": "planned"
+  }
+]
