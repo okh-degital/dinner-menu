@@ -10,7 +10,9 @@ from string import Template
 from urllib.parse import urlsplit
 
 BASE_DIR = Path(__file__).resolve().parent
-UNITS = {"g", "ml", "個", "枚", "束", "袋", "本", "丁", "大さじ", "小さじ"}
+UNITS = {"g", "ml", "個", "枚", "束", "袋", "本", "丁", "大さじ", "小さじ",
+         "切れ", "尾", "匹", "片", "パック", "玉", "房", "合", "カップ", "人分",
+         "cm", "つ", "茶碗杯", "かけ", "株", "つかみ", "片分", "膳"}
 
 
 def number(value):
@@ -26,6 +28,8 @@ def amount_text(amount, unit):
         tablespoons, remainder = divmod(amount, 3)
         text = "大さじ" + number(Fraction(tablespoons))
         return text + ("＋小さじ" + number(remainder) if remainder else "")
+    if unit == "茶碗杯":
+        return "茶碗" + number(amount) + "杯"
     return unit + number(amount) if unit in ("大さじ", "小さじ") else number(amount) + unit
 
 
@@ -53,7 +57,7 @@ def scale_ingredients(detail, servings):
         if not isinstance(note, str):
             raise ValueError("材料の注記を確認してください。")
         if item.get("amount") is None:
-            if unit or not any(word in note for word in ("少々", "適量")):
+            if unit or not any(word in note for word in ("少々", "適量", "少量")):
                 raise ValueError("数量不明の材料があります。確認データに分量を追加してください。")
             amount, text = None, note
         else:
@@ -96,7 +100,9 @@ def assemble(plan, details):
                       "recipe_id": recipe["recipe_id"], "title": recipe["title"],
                       "author": recipe.get("author", ""), "source_url": url,
                       "source_servings": detail["source_servings"], "verified_on": detail["verified_on"],
-                      "ingredients": ingredients, "notes": detail.get("notes", [])})
+                      "automatically_read": detail.get("automatically_read", False),
+                      "ingredients": ingredients, "notes": detail.get("notes", []),
+                      "price_reasons": recipe.get("price_reasons", [])})
         for item in ingredients:
             total = totals.setdefault(item["name"], {"numeric": defaultdict(Fraction), "approximate": False,
                                                     "as_needed": [], "used_on": []})
@@ -116,7 +122,7 @@ def assemble(plan, details):
         if total["approximate"]:
             text += "（目安）"
         if total["as_needed"]:
-            qualitative = "・".join(word for word in ("適量", "少々")
+            qualitative = "・".join(word for word in ("適量", "少々", "少量")
                                    if any(word in item["note"] for item in total["as_needed"]))
             text += (" ＋ 別途" if text else "") + qualitative
         shopping.append({"name": name, "display": text,
@@ -130,11 +136,13 @@ def assemble(plan, details):
 def render_html(data, template):
     cards, shopping = [], []
     for meal in data["meals"]:
+        checked_label = "元レシピ取得" if meal.get("automatically_read") else "分量確認"
         items = "".join(f"<li>{escape(i['name'])}：{escape(i['display'])}</li>" for i in meal["ingredients"])
         notes = "".join(f'<p class="note">{escape(note)}</p>' for note in meal["notes"])
+        notes += "".join(f'<p class="note">選んだ理由：{escape(reason)}</p>' for reason in meal.get("price_reasons", []))
         cards.append(f'<article><span class="day">{escape(meal["date"])}（{escape(meal["weekday"])}）</span>'
                      f'<h2>{escape(meal["title"])}</h2><h3>材料（{data["target_servings"]}人分）</h3><ul>{items}</ul>'
-                     f'<p class="note">元レシピは{meal["source_servings"]}人分。分量確認：{escape(meal["verified_on"])}</p>'
+                     f'<p class="note">元レシピは{meal["source_servings"]}人分。{checked_label}：{escape(meal["verified_on"])}</p>'
                      f'{notes}<p><a href="{escape(meal["source_url"], quote=True)}" target="_blank" rel="noopener noreferrer">'
                      '楽天レシピで作り方を見る</a></p>'
                      f'<p class="note">レシピ提供：{escape(meal["author"])}</p></article>')

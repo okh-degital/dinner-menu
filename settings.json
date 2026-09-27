@@ -1,3 +1,18 @@
 {
-  "weekdays": ["月", "火", "水", "金"]
+  "weekdays": ["月", "火", "水", "金"],
+  "meal_preferences": {
+    "exclude_salads": true,
+    "rice_bowls": "prefer",
+    "max_same_dish_per_week": 1,
+    "max_rice_bowls_per_week": 1,
+    "max_taco_rice_per_month": 1
+  },
+  "food_prices": {
+    "enabled": true,
+    "cheap_below_normal_percent": 10,
+    "priority": "standard",
+    "max_age_days": {"vegetables": 14, "meat_eggs": 45},
+    "max_extra_categories": 2,
+    "same_main_ingredient_limit": 2
+  }
 }

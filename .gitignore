@@ -7,3 +7,4 @@ venv/
 .vscode/
 /rakuten.local.json
 /data/
+/output/weekly-preview.html
