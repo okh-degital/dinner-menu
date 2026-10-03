@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import ipaddress
 import os
 import re
 import sys
@@ -66,6 +67,22 @@ def normalize_recipes(payload):
     return recipes
 
 
+def api_error_message(code):
+    message = f"楽天APIがHTTP {code}を返しました。"
+    if code != 403:
+        return message + "アプリの利用許可・設定を確認してください。"
+    message += "IPアドレスを変更してください。楽天のアプリ設定に登録した許可IPを確認してください。"
+    try:
+        # 認証情報を送らず、403時だけ短いタイムアウトで調べる。
+        with urlopen("https://api.ipify.org", timeout=3) as response:
+            current = ipaddress.ip_address(response.read(128).decode("ascii").strip())
+        if current.is_global:
+            message += f" 現在のグローバルIP: {current}"
+    except (OSError, ValueError):
+        pass
+    return message
+
+
 def fetch_ranking(app_id, access_key, category_id=None):
     params = {"applicationId": app_id, "format": "json", "formatVersion": 2}
     if category_id:
@@ -82,7 +99,7 @@ def fetch_ranking(app_id, access_key, category_id=None):
             payload = json.load(response)
     except HTTPError as error:
         # 応答本文やリクエストURLは認証情報を含み得るため表示しない。
-        raise ValueError(f"楽天APIがHTTP {error.code}を返しました。アプリの利用許可・設定を確認してください。") from None
+        raise ValueError(api_error_message(error.code)) from None
     except (URLError, TimeoutError):
         raise ValueError("楽天APIへ接続できませんでした。時間をおいて再実行してください。") from None
     return normalize_recipes(payload)

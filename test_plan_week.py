@@ -58,11 +58,11 @@ class WeekPlanTests(unittest.TestCase):
         no_history = build_plan(report(taco, dict(candidate("other"), title="沖縄タコライス")), [], ["水", "金"], MONDAY)
         self.assertEqual(sum(m["recipe"] is not None for m in no_history["meals"]), 1)
 
-    def test_existing_off_day_bowl_and_future_monthly_plan_are_counted(self):
+    def test_current_week_excluded_and_future_monthly_plan_counted(self):
         regular = candidate("regular")
         bowl = dict(candidate("bowl", score=50), title="豚丼")
         history = [dict(entry(date(2026, 10, 1), "other"), title="天津丼")]
-        self.assertEqual(build_plan(report(bowl, regular), history, ["月"], MONDAY)["meals"][0]["recipe"]["recipe_id"], "regular")
+        self.assertEqual(build_plan(report(bowl, regular), history, ["月"], MONDAY)["meals"][0]["recipe"]["recipe_id"], "bowl")
         taco = dict(candidate("taco", score=50), title="タコライス")
         future = [dict(entry(date(2026, 10, 20), "reserved"), title="タコライス")]
         self.assertEqual(build_plan(report(taco, regular), future, ["月"], date(2026, 10, 5))["meals"][0]["recipe"]["recipe_id"], "regular")
@@ -132,9 +132,9 @@ class WeekPlanTests(unittest.TestCase):
 
     def test_changed_history_blocks_recording(self):
         plan = build_plan(report(candidate("A")), [], ["月"], MONDAY)
-        for history in ([entry(MONDAY, "B")], [entry(MONDAY - timedelta(days=1), "A")]):
-            with self.assertRaises(ValueError):
-                record_plan(history, plan)
+        self.assertEqual(record_plan([entry(MONDAY, "B")], plan)[0]["recipe_id"], "A")
+        with self.assertRaises(ValueError):
+            record_plan([entry(MONDAY - timedelta(days=1), "A")], plan)
 
     def test_invalid_history_week_and_duplicate_weekdays(self):
         data = report(candidate("A"))
@@ -144,8 +144,7 @@ class WeekPlanTests(unittest.TestCase):
             build_plan(data, [], DAYS, MONDAY + timedelta(days=1))
         with self.assertRaises(ValueError):
             build_plan(data, [], ["月", "月"], MONDAY)
-        with self.assertRaises(ValueError):
-            build_plan(data, [entry(MONDAY, "A")], DAYS, MONDAY)
+        self.assertEqual(build_plan(data, [entry(MONDAY, "A")], ["月"], MONDAY)["status"], "draft_ready")
 
 
 if __name__ == "__main__":

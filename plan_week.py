@@ -3,6 +3,8 @@
 import argparse
 import json
 import re
+import random
+import unicodedata
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -55,11 +57,49 @@ def food_group(recipe):
     return "魚介・その他"
 
 
+# カタカナ・半角表記をひらがなへ寄せてから魚種を判定する。
+SEAFOOD = {
+    "さば": r"さば|鯖", "さけ": r"さけ|鮭|さーもん",
+    "ぶり": r"ぶり|鰤|はまち|わらさ|いなだ",
+    "たら": r"たら|鱈", "あじ": r"あじ|鯵|鰺",
+    "いわし": r"いわし|鰯", "さんま": r"さんま|秋刀魚",
+    "まぐろ": r"まぐろ|鮪|つな|しーちきん", "かつお": r"かつお|鰹",
+    "たい": r"真鯛|鯛|まだい|^たい(?:$|[（(]|の|切り身)", "さわら": r"さわら|鰆",
+    "ほっけ": r"ほっけ", "ししゃも": r"ししゃも", "うなぎ": r"うなぎ|鰻",
+    "かれい": r"かれい|鰈", "ひらめ": r"ひらめ|鮃",
+    "えび": r"えび|海老|蝦", "いか": r"いか|烏賊", "たこ": r"たこ|蛸",
+    "かに": r"かに|蟹", "ほたて": r"ほたて|帆立", "あさり": r"あさり|浅蜊",
+    "しじみ": r"しじみ|蜆", "はまぐり": r"はまぐり|蛤", "かき": r"牡蠣|かき",
+}
+
+
+def seafood_species(recipe):
+    names = recipe.get("ingredient_names")
+    # 旧履歴には材料がないため料理名を補助的に使用する。
+    names = names if names is not None else [recipe.get("title", "")]
+    species = set()
+    for name in names:
+        name = unicodedata.normalize("NFKC", name)
+        name = ''.join(chr(ord(c) - 96) if 'ァ' <= c <= 'ヶ' else c for c in name)
+        name = re.sub(r"\s+", "", name)
+        if re.search(r"だし|出汁|えきす|すーぷ|節|ふりかけ|そーす|醤油|しょうゆ|かにかま|かに風味", name):
+            continue
+        # 調味料・料理名の部分一致を魚介と誤認しない。
+        name = re.sub(r"たこらいす|じゃがいも|あじつけ|味付け|酒|さけ蒸し|しいたけ|かき混ぜ", "", name)
+        species.update(key for key, pattern in SEAFOOD.items() if re.search(pattern, name))
+    return species
+
+
+def outside_week(history, start):
+    return [item for item in history
+            if not start <= parse_date(item["date"]) < start + timedelta(days=7)]
+
+
 def variety_limits(recipe, day, preferences):
     """週は月〜日、月は暦月。タコライスは丼物の枠にも含める。"""
     week = (day - timedelta(days=day.weekday())).isoformat()
     family = dish_family(recipe)
-    limits = {}
+    limits = {("seafood", week, species): 1 for species in seafood_species(recipe)}
     if family is not None:
         limits[("dish", week, family)] = preferences["max_same_dish_per_week"]
     if is_rice_bowl(recipe):
@@ -86,10 +126,11 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
             or len(set(weekdays)) != len(weekdays)):
         raise ValueError("対象曜日は月・火・水・金から重複なしで指定してください。")
     validate_history(history)
+    previous = {item["date"]: recipe_key(item) for item in history
+                if week_start <= parse_date(item["date"]) < week_start + timedelta(days=7)}
+    history = outside_week(history, week_start)
     initial_counts = history_variety_counts(history, preference_config)
     days = sorted((week_start + timedelta(days=DAY_OFFSETS[day]), day) for day in weekdays)
-    if any(item["date"] in {day.isoformat() for day, _ in days} for item in history):
-        raise ValueError("対象日に記録済みの献立があります。別の週を指定してください。")
     unique = {}
     for recipe in report["recipes"]:
         if recipe.get("status") != "candidate":
@@ -99,6 +140,8 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
             raise ValueError("候補の点数・材料を確認してください。")
         unique.setdefault(key, recipe)
     recipes = sorted(unique.values(), key=lambda r: (-r["score"], r["recipe_id"]))
+    random.shuffle(recipes)
+    lottery = {recipe_key(r): random.random() for r in recipes}
     config = price_settings({"food_prices": pricing or {"enabled": False}})
     eligible, rejected = [], []
     for day, weekday in days:
@@ -117,7 +160,9 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
                          "recipe_ids": [r["recipe_id"] for r in recipes if recipe_key(r) in blocked]})
 
     # 最大4日・基本4カテゴリ、丼物とタコライス、価格の追加2カテゴリで最大32件。
-    best, best_score = [], (-1, -1, -999, -1)
+    best, best_score = [], (-1,)
+    limits_by_day = [{recipe_key(r): variety_limits(r, day, preference_config)
+                      for r in eligible[i]} for i, (day, _) in enumerate(days)]
 
     def search(index, selected, used, variety_counts):
         nonlocal best, best_score
@@ -125,13 +170,16 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
             chosen = [recipe for recipe in selected if recipe is not None]
             counts = Counter(key for r in chosen for key in r.get("main_ingredients", []))
             overuse = sum(max(0, count - config["same_main_ingredient_limit"]) for count in counts.values())
-            score = (len(chosen), len({food_group(r) for r in chosen}), -overuse, sum(r["score"] for r in chosen))
+            changed_set = bool({recipe_key(r) for r in chosen} != set(previous.values()))
+            changed_days = any(r is not None and recipe_key(r) != previous.get(days[i][0].isoformat())
+                               for i, r in enumerate(selected))
+            score = (len(chosen), changed_set, changed_days, len({food_group(r) for r in chosen}), -overuse, sum(r["score"] for r in chosen), sum(lottery[recipe_key(r)] for r in chosen))
             if score > best_score:
                 best, best_score = list(selected), score
             return
         for recipe in eligible[index]:
             key = recipe_key(recipe)
-            limits = variety_limits(recipe, days[index][0], preference_config)
+            limits = limits_by_day[index][key]
             if key not in used and all(variety_counts[k] < limit for k, limit in limits.items()):
                 counts = variety_counts.copy()
                 counts.update(limits.keys())
@@ -144,7 +192,7 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
         meals.append({"date": day.isoformat(), "weekday": weekday, "recipe": recipe,
                       "group": food_group(recipe) if recipe else None,
                       "selection_reasons": ["当日の直前14日間に同じレシピIDの記録なし",
-                                            "同じ週ではレシピIDを重複させない",
+                                            "同じ週ではレシピIDと魚介の種類を重複させない",
                                             f"判定できた同じ種類の料理は週{family_limit}回まで",
                                             f"丼物は週{preference_config['max_rice_bowls_per_week']}回、タコライスは同じ月に{preference_config['max_taco_rice_per_month']}回まで",
                                             "料理の種類と主材料の偏りを抑え、候補の評価点を優先"]
@@ -167,13 +215,13 @@ def record_plan(history, plan, preferences=None):
     validate_history(history)
     preference_config = meal_preferences({"meal_preferences": preferences if preferences is not None else
                                          {key: plan.get(key, 1) for key in ("max_same_dish_per_week", "max_rice_bowls_per_week", "max_taco_rice_per_month")}})
-    variety_counts = history_variety_counts(history, preference_config)
     if plan.get("status") != "draft_ready":
         raise ValueError("候補不足の献立案は記録できません。")
     start = parse_date(plan["week_start"])
     if start.weekday() != 0 or not plan.get("meals"):
         raise ValueError("献立案の開始日・内容を確認してください。")
-    existing = {item["date"]: item for item in history}
+    history = outside_week(history, start)
+    variety_counts = history_variety_counts(history, preference_config)
     additions, seen_days, seen_recipes = [], set(), set()
     for meal in plan["meals"]:
         day = parse_date(meal["date"])
@@ -189,13 +237,9 @@ def record_plan(history, plan, preferences=None):
         if any(recipe_key(item) == key and day - timedelta(days=14) <= parse_date(item["date"]) < day
                for item in history):
             raise ValueError("献立案の作成後に履歴が変わりました。14日間の重複を確認してください。")
-        if meal["date"] in existing:
-            if recipe_key(existing[meal["date"]]) != key:
-                raise ValueError("同じ日付に別の献立が記録されています。上書きしません。")
-            continue
         limits = variety_limits(meal["recipe"], day, preference_config)
         if any(variety_counts[k] >= limit for k, limit in limits.items()):
-            raise ValueError("丼物の週の上限、タコライスの月の上限、または同じ料理の週の上限を超えています。")
+            raise ValueError("魚介の同一週重複、丼物の週の上限、タコライスの月の上限、または同じ料理の週の上限を超えています。")
         variety_counts.update(limits.keys())
         additions.append({"date": meal["date"], "source": key[0], "recipe_id": key[1],
                           "title": meal["recipe"]["title"], "status": "planned"})
@@ -241,7 +285,7 @@ def main():
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
             updated = record_plan(history, plan, meal_preferences(settings))
             save_json(history_path, updated)
-            print(f"確認した献立を予定として記録しました（新規{len(updated) - len(history)}件）。")
+            print(f"確認した献立を予定として記録しました（対象週を置き換え、履歴は計{len(updated)}件）。")
             return 0
         today = datetime.now(timezone(timedelta(hours=9))).date()
         start = parse_date(args.week_start) if args.week_start else today + timedelta(days=(-today.weekday()) % 7)

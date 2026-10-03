@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
-from fetch_rakuten import load_credentials, fetch_ranking
+from fetch_rakuten import load_credentials, fetch_ranking, api_error_message
 from food_prices import assess, cheap_categories, load_prices, price_settings, render_report, score_recipe
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -136,7 +136,7 @@ def collect(base_dir, prices=None, config=None, as_of=None, preferences=None, ex
         with urlopen(request, timeout=30) as response:
             payload = json.load(response)
     except HTTPError as error:
-        raise ValueError(f"カテゴリ一覧の取得に失敗しました（HTTP {error.code}）。") from None
+        raise ValueError(api_error_message(error.code)) from None
     except (URLError, TimeoutError):
         raise ValueError("カテゴリ一覧に接続できませんでした。") from None
     categories = category_rows(payload.get("result", {}))
@@ -270,7 +270,10 @@ def main():
         print("候補の保存のみ。履歴除外・3人分への換算・公開はまだ行っていません。")
         print("候補のレシピリンクと選んだ理由: data/dinner_candidates.md")
         return 0
-    except (ValueError, KeyError, TypeError, AttributeError):
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    except (KeyError, TypeError, AttributeError):
         print("候補作成に失敗しました。認証・通信・入力データの形式を確認してください。", file=sys.stderr)
         return 1
     except OSError:

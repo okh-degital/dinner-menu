@@ -2,7 +2,6 @@
 
 import argparse
 from contextlib import contextmanager
-from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -84,23 +83,6 @@ def candidates(pool, prices, pricing, preferences, today):
             "price_warnings": prices.get("warnings", []), "categories": pool.get("categories", [])}
 
 
-def saved_week(base, history, start, weekdays):
-    dates = {(start + timedelta(days=DAY_OFFSETS[d])).isoformat() for d in weekdays}
-    recorded = {row["date"]: row for row in history if row["date"] in dates}
-    if not recorded:
-        return None
-    path = base / "data/weekly_plan.json"
-    if not path.exists():
-        raise ValueError("この週の記録はありますが、保存済みの献立データがありません。復元が必要です。")
-    plan = read_json(path)
-    meals = plan.get("meals", [])
-    if (plan.get("week_start") != start.isoformat() or plan.get("status") != "draft_ready"
-            or len(recorded) != len(dates) or {m["date"] for m in meals} != dates
-            or any(m["recipe"]["recipe_id"] != recorded[m["date"]]["recipe_id"] for m in meals)):
-        raise ValueError("この週の履歴と保存済み献立が一致しません。既存の献立を残して停止します。")
-    return deepcopy(plan)
-
-
 def prepare(base, work, start, today, cached=False):
     settings = read_json(base / "settings.json")
     pricing, preferences = price_settings(settings), meal_preferences(settings)
@@ -110,7 +92,6 @@ def prepare(base, work, start, today, cached=False):
         raise ValueError("対象曜日と週の月曜日を確認してください。")
     history = read_json(base / "history.json")
     validate_history(history)
-    plan = saved_week(base, history, start, weekdays)
     print(f"対象: {start}週 / 3人分", flush=True)
     print("1/4 農水省の価格を確認しています。", flush=True)
     if cached or not pricing["enabled"]:
@@ -127,62 +108,47 @@ def prepare(base, work, start, today, cached=False):
         raise ValueError("分量データのIDが重複しています。")
     artifacts = {"data/food_prices.json": json_text(prices),
                  "data/food_prices.md": render_report(prices, pricing, today)}
-    if plan is not None:
-        print("2/4 この週は確定済みです。同じ献立を使ってHTMLを更新します。", flush=True)
-        # 今の好み設定で禁止した料理が含まれる場合、黙って変更しない。
+    print("2/4 楽天レシピから献立を選んでいます。", flush=True)
+    pool = read_json(base / "data/dinner_pool.json") if cached else collect(base, prices, pricing, today, preferences)
+    rejected, expanded = {}, False
+    while True:
+        report = candidates(pool, prices, pricing, preferences, today)
+        for recipe in report["recipes"]:
+            if recipe["recipe_id"] in rejected:
+                recipe["status"] = "hold"
+                recipe["reasons"].append("分量の確認が必要: " + rejected[recipe["recipe_id"]])
+        plan = build_plan(report, history, weekdays, start, prices, pricing, preferences)
+        if plan["status"] != "draft_ready":
+            if not expanded and not cached:
+                print("候補が足りないため、肉・魚・豆腐のカテゴリを追加で確認します。", flush=True)
+                pool = collect(base, prices, pricing, today, preferences, EXTRA_CATEGORIES)
+                expanded = True
+                continue
+            raise ValueError("条件と分量を満たす主菜が4日分そろいませんでした。現在のHTMLと履歴は残しています。")
+        new_rejections = False
         for meal in plan["meals"]:
             recipe = meal["recipe"]
-            status, _, _ = classify(recipe, preferences)
-            if status != "candidate":
-                raise ValueError("確定済み献立が現在の好み設定と合いません。内容の確認が必要です。")
-            bonus, reasons, primary = score_recipe(recipe, prices, pricing, parse_date(meal["date"]))
-            recipe.update(price_bonus=bonus, price_reasons=reasons, main_ingredients=primary)
-        plan.update(price_sources=prices.get("sources", []), price_warnings=prices.get("warnings", []))
-    else:
-        print("2/4 楽天レシピから献立を選んでいます。", flush=True)
-        pool = read_json(base / "data/dinner_pool.json") if cached else collect(base, prices, pricing, today, preferences)
-        rejected, expanded = {}, False
-        while True:
-            report = candidates(pool, prices, pricing, preferences, today)
-            for recipe in report["recipes"]:
-                if recipe["recipe_id"] in rejected:
-                    recipe["status"] = "hold"
-                    recipe["reasons"].append("分量の確認が必要: " + rejected[recipe["recipe_id"]])
-            plan = build_plan(report, history, weekdays, start, prices, pricing, preferences)
-            if plan["status"] != "draft_ready":
-                if not expanded and not cached:
-                    print("候補が足りないため、肉・魚・豆腐のカテゴリを追加で確認します。", flush=True)
-                    pool = collect(base, prices, pricing, today, preferences, EXTRA_CATEGORIES)
-                    expanded = True
-                    continue
-                raise ValueError("条件と分量を満たす主菜が4日分そろいませんでした。現在のHTMLと履歴は残しています。")
-            new_rejections = False
-            for meal in plan["meals"]:
-                recipe = meal["recipe"]
-                key = recipe["recipe_id"]
-                if key in lookup:
-                    source_link(lookup[key], key)
-                    scale_ingredients(lookup[key], 3)
-                    continue
-                try:
-                    if cached:
-                        raise ValueError("保存済みの分量がありません。")
-                    print("分量を確認: " + recipe["title"], flush=True)
-                    time.sleep(1.1)
-                    lookup[key] = fetch_detail(recipe, today)
-                except ValueError as error:
-                    rejected[key] = str(error)
-                    print("別の候補を探します: " + str(error), flush=True)
-                    new_rejections = True
-            if not new_rejections:
-                artifacts.update({"data/dinner_pool.json": json_text(pool),
-                                  "data/dinner_candidates.json": json_text(report),
-                                  "data/dinner_candidates.md": render_candidates(report, prices, pricing, today)})
-                break
+            key = recipe["recipe_id"]
+            if key in lookup:
+                source_link(lookup[key], key)
+                scale_ingredients(lookup[key], 3)
+                continue
+            try:
+                if cached:
+                    raise ValueError("保存済みの分量がありません。")
+                print("分量を確認: " + recipe["title"], flush=True)
+                time.sleep(1.1)
+                lookup[key] = fetch_detail(recipe, today)
+            except ValueError as error:
+                rejected[key] = str(error)
+                print("別の候補を探します: " + str(error), flush=True)
+                new_rejections = True
+        if not new_rejections:
+            artifacts.update({"data/dinner_pool.json": json_text(pool),
+                              "data/dinner_candidates.json": json_text(report),
+                              "data/dinner_candidates.md": render_candidates(report, prices, pricing, today)})
+            break
     print("3/4 3人分の材料と買い物リストを作成しています。", flush=True)
-    dates = {meal["date"] for meal in plan["meals"]}
-    # 保存済みの週も現在の上限・14日ルールで再検証する。
-    record_plan([h for h in history if h["date"] not in dates], plan, preferences)
     updated_history = record_plan(history, plan, preferences)
     details["recipes"] = list(lookup.values())
     shopping = assemble(plan, details)
@@ -324,7 +290,7 @@ def main(argv=None):
                 publish(BASE_DIR)
                 if not wait_for_public_page(marker):
                     print("GitHubへの送信は完了しましたが、公開ページへの反映をまだ確認できません。")
-                    print("数分後に同じbatを実行すると、同じ献立のまま再確認できます。")
+                    print("数分後に公開ページを再読み込みしてください。batの再実行では献立を再抽選します。")
                     print(PUBLIC_URL)
                     return 3
                 destination = PUBLIC_URL + "?update=" + marker[:12]

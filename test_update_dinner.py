@@ -91,6 +91,7 @@ class UpdateTests(unittest.TestCase):
         self.write("settings.json", self.settings)
         self.write("history.json", self.history)
         self.write("data/weekly_plan.json", self.plan)
+        self.write("data/dinner_pool.json", {"fetched_at": "2026-09-27", "recipes": [m["recipe"] for m in self.plan["meals"]]})
         self.write("data/recipe_details.json", shopping_fixtures.ShoppingTests.details)
         (self.base / "templates/weekly.html").write_text(
             (update.BASE_DIR / "templates/weekly.html").read_text(encoding="utf-8"), encoding="utf-8")
@@ -105,18 +106,20 @@ class UpdateTests(unittest.TestCase):
     def prepare(self, cached=True):
         return update.prepare(self.base, self.base / "work", date(2026, 9, 28), date(2026, 9, 27), cached)
 
-    def test_recorded_week_reuses_recipes_and_history(self):
-        with patch.object(update, "collect", side_effect=AssertionError("must reuse")):
-            artifacts, marker = self.prepare()
-        self.assertEqual(json.loads(artifacts["history.json"]), self.history)
+    def test_recorded_week_redraws_and_replaces_history(self):
+        pool = update.read_json(self.base / "data/dinner_pool.json")
+        with patch.object(update, "collect", return_value=pool) as collect:
+            artifacts, marker = self.prepare(cached=False)
+        collect.assert_called_once()
+        self.assertEqual(len(json.loads(artifacts["history.json"])), 4)
         self.assertEqual(artifacts["output/index.html"].count('<article>'), 4)
         self.assertIn('材料（3人分）', artifacts["output/index.html"])
         self.assertIn(marker, artifacts["output/index.html"])
         self.assertEqual((self.base / "output/index.html").read_text(), "previous")
         update.install_artifacts(self.base, artifacts)
         again, second_marker = self.prepare()
-        self.assertEqual(marker, second_marker)
-        self.assertEqual(json.loads(again["history.json"]), self.history)
+        self.assertNotEqual(marker, second_marker)
+        self.assertEqual(len(json.loads(again["history.json"])), 4)
 
     def test_new_week_selects_scales_and_records(self):
         self.write("history.json", [])
@@ -152,10 +155,11 @@ class UpdateTests(unittest.TestCase):
         plan = json.loads(artifacts["data/weekly_plan.json"])
         self.assertEqual({m["recipe"]["recipe_id"] for m in plan["meals"]}, {"2", "3", "4", "5"})
 
-    def test_partial_or_conflicting_history_not_regenerated(self):
+    def test_partial_history_regenerated_without_saved_plan(self):
         self.write("history.json", self.history[:1])
-        with self.assertRaisesRegex(ValueError, "一致しません"):
-            self.prepare()
+        (self.base / "data/weekly_plan.json").unlink()
+        artifacts, _ = self.prepare()
+        self.assertEqual(len(json.loads(artifacts["history.json"])), 4)
 
     def test_transaction_rolls_back_mid_write_and_keeps_backup(self):
         before = (self.base / "history.json").read_bytes()
