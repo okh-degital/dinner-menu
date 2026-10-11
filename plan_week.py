@@ -14,6 +14,7 @@ from select_dinner import dish_family, is_rice_bowl, meal_preferences, save_json
 from food_prices import load_prices, price_settings, score_recipe
 
 BASE_DIR = Path(__file__).resolve().parent
+HISTORY_WEEKS = 4
 DAY_OFFSETS = {"月": 0, "火": 1, "水": 2, "金": 4}
 
 
@@ -95,6 +96,19 @@ def outside_week(history, start):
             if not start <= parse_date(item["date"]) < start + timedelta(days=7)]
 
 
+def history_blocks(history, week_start):
+    """対象週の直前4週間にあるレシピIDと判定可能な料理ファミリー。"""
+    recent = [item for item in history
+              if week_start - timedelta(weeks=HISTORY_WEEKS) <= parse_date(item["date"]) < week_start]
+    return ({recipe_key(item) for item in recent},
+            {family for item in recent if (family := dish_family(item)) is not None})
+
+
+def blocked_by_history(recipe, blocks):
+    recipe_ids, families = blocks
+    return recipe_key(recipe) in recipe_ids or dish_family(recipe) in families
+
+
 def variety_limits(recipe, day, preferences):
     """週は月〜日、月は暦月。タコライスは丼物の枠にも含める。"""
     week = (day - timedelta(days=day.weekday())).isoformat()
@@ -144,12 +158,11 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
     lottery = {recipe_key(r): random.random() for r in recipes}
     config = price_settings({"food_prices": pricing or {"enabled": False}})
     eligible, rejected = [], []
+    blocks = history_blocks(history, week_start)
     for day, weekday in days:
-        blocked = {recipe_key(item) for item in history
-                   if day - timedelta(days=14) <= parse_date(item["date"]) < day}
         available = []
         for recipe in recipes:
-            if recipe_key(recipe) in blocked:
+            if blocked_by_history(recipe, blocks):
                 continue
             bonus, reasons, primary = score_recipe(recipe, prices or {"items": []}, config, day)
             available.append(dict(recipe, score=recipe.get("base_score", recipe["score"]) + bonus,
@@ -157,7 +170,7 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
                                   dish_family=dish_family(recipe)))
         eligible.append(available)
         rejected.append({"date": day.isoformat(), "weekday": weekday,
-                         "recipe_ids": [r["recipe_id"] for r in recipes if recipe_key(r) in blocked]})
+                         "recipe_ids": [r["recipe_id"] for r in recipes if blocked_by_history(r, blocks)]})
 
     # 最大4日・基本4カテゴリ、丼物とタコライス、価格の追加2カテゴリで最大32件。
     best, best_score = [], (-1,)
@@ -191,7 +204,7 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
     for (day, weekday), recipe in zip(days, best):
         meals.append({"date": day.isoformat(), "weekday": weekday, "recipe": recipe,
                       "group": food_group(recipe) if recipe else None,
-                      "selection_reasons": ["当日の直前14日間に同じレシピIDの記録なし",
+                      "selection_reasons": ["対象週の直前4週間に同じレシピID・判定可能な同じ料理の記録なし",
                                             "同じ週ではレシピIDと魚介の種類を重複させない",
                                             f"判定できた同じ種類の料理は週{family_limit}回まで",
                                             f"丼物は週{preference_config['max_rice_bowls_per_week']}回、タコライスは同じ月に{preference_config['max_taco_rice_per_month']}回まで",
@@ -202,7 +215,10 @@ def build_plan(report, history, weekdays, week_start, prices=None, pricing=None,
             "status": "draft_ready" if all(best) else "insufficient_candidates",
             "target_servings": 3, "quantities_verified": False,
             "source_fetched_at": report["source_fetched_at"],
-            "history_window_days": 14, "history_exclusions": rejected, "meals": meals,
+            "history_window_days": HISTORY_WEEKS * 7,
+            "history_window_start": (week_start - timedelta(weeks=HISTORY_WEEKS)).isoformat(),
+            "history_window_end": (week_start - timedelta(days=1)).isoformat(),
+            "history_exclusions": rejected, "meals": meals,
             "max_same_dish_per_week": family_limit,
             "max_rice_bowls_per_week": preference_config["max_rice_bowls_per_week"],
             "max_taco_rice_per_month": preference_config["max_taco_rice_per_month"],
@@ -221,6 +237,7 @@ def record_plan(history, plan, preferences=None):
     if start.weekday() != 0 or not plan.get("meals"):
         raise ValueError("献立案の開始日・内容を確認してください。")
     history = outside_week(history, start)
+    blocks = history_blocks(history, start)
     variety_counts = history_variety_counts(history, preference_config)
     additions, seen_days, seen_recipes = [], set(), set()
     for meal in plan["meals"]:
@@ -234,9 +251,8 @@ def record_plan(history, plan, preferences=None):
             raise ValueError("献立案に同じレシピが重複しています。")
         seen_days.add(day)
         seen_recipes.add(key)
-        if any(recipe_key(item) == key and day - timedelta(days=14) <= parse_date(item["date"]) < day
-               for item in history):
-            raise ValueError("献立案の作成後に履歴が変わりました。14日間の重複を確認してください。")
+        if blocked_by_history(meal["recipe"], blocks):
+            raise ValueError("対象週の直前4週間に同じレシピIDまたは同じ料理の履歴があります。献立案を再作成してください。")
         limits = variety_limits(meal["recipe"], day, preference_config)
         if any(variety_counts[k] >= limit for k, limit in limits.items()):
             raise ValueError("魚介の同一週重複、丼物の週の上限、タコライスの月の上限、または同じ料理の週の上限を超えています。")
@@ -265,13 +281,13 @@ def write_preview(path, plan):
               "タコライスを選ぶ週は、丼物の枠も1回使います。記録済みの予定も数えています。",
               "タコライス・豚丼などは、投稿者やレシピIDが違っても同じ種類として数えます。",
               "献立案の作成だけでは履歴や公開ページは更新しません。",
-              "過去14日の履歴との重複判定は楽天のレシピID単位です。",
+              "対象週の直前4週間は、同じ楽天レシピIDと判定可能な同じ料理を除外します。",
               "登録する履歴は食べた実績ではなく、確認した献立の予定です。", ""]
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="過去14日の履歴から重複を避けた献立案を作成")
+    parser = argparse.ArgumentParser(description="対象週の直前4週間の履歴から重複を避けた献立案を作成")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--week-start", help="対象週の月曜日（YYYY-MM-DD）")
     mode.add_argument("--record", action="store_true", help="保存済みの献立案を予定としてhistory.jsonへ記録")

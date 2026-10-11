@@ -189,7 +189,7 @@ def render_candidates(report, prices, config, as_of):
         lines.append("有効期間内で割安条件に該当する食材がないため、通常の条件で候補を選んでいます。")
     lines += ["", "取得したカテゴリ：" + "、".join(plain(c["name"]) for c in report.get("categories", [])),
               "", "候補一覧には同じ種類の料理の別レシピも含みます。週の献立を作るときに回数を制限します。",
-              "この段階では過去14日の履歴との照合と3人分の分量確認はまだ行っていません。", ""]
+              "この段階では対象週の直前4週間の履歴との照合と3人分の分量確認はまだ行っていません。", ""]
     for status, heading in (("candidate", "主菜候補"), ("hold", "保留"), ("excluded", "除外")):
         recipes = [r for r in report["recipes"] if r["status"] == status]
         lines += [f"## {heading}（{len(recipes)}件）", ""]

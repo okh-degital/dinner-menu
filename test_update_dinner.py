@@ -138,6 +138,16 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual((self.base / "output/index.html").read_text(), "previous")
         self.assertEqual(update.read_json(self.base / "history.json"), [])
 
+    def test_four_week_shortage_preserves_existing_html_and_history(self):
+        # 27日前のIDは、当週の再抽選でも復活させない。
+        old = dict(self.history[0], date="2026-09-01")
+        history = [old] + self.history
+        self.write("history.json", history)
+        with self.assertRaisesRegex(ValueError, "そろいません"):
+            self.prepare()
+        self.assertEqual((self.base / "output/index.html").read_text(), "previous")
+        self.assertEqual(update.read_json(self.base / "history.json"), history)
+
     def test_one_unreadable_recipe_replaced_without_relaxing_rules(self):
         self.write("history.json", [])
         self.write("data/recipe_details.json", {"recipes": []})

@@ -50,9 +50,10 @@ class WeekPlanTests(unittest.TestCase):
         self.assertEqual(next_month["meals"][0]["recipe"]["recipe_id"], "new")
 
     def test_month_boundary_uses_each_meal_date_and_keeps_weekly_limit(self):
-        history = [dict(entry(date(2026, 9, 1), "old"), title="タコライス")]
+        start = date(2026, 8, 31)
+        history = [dict(entry(date(2026, 8, 1), "old"), title="タコライス")]
         taco = dict(candidate("new"), title="タコライス")
-        plan = build_plan(report(taco), history, ["水", "金"], MONDAY)
+        plan = build_plan(report(taco), history, ["月", "火"], start)
         self.assertIsNone(plan["meals"][0]["recipe"])
         self.assertEqual(plan["meals"][1]["recipe"]["recipe_id"], "new")
         no_history = build_plan(report(taco, dict(candidate("other"), title="沖縄タコライス")), [], ["水", "金"], MONDAY)
@@ -96,21 +97,24 @@ class WeekPlanTests(unittest.TestCase):
         self.assertEqual(len({m["group"] for m in plan["meals"]}), 4)
         self.assertNotIn("held", [m["recipe"]["recipe_id"] for m in plan["meals"]])
 
-    def test_14_days_inclusive_and_15_days_expired(self):
-        history = [entry(MONDAY - timedelta(days=14), "A"), entry(MONDAY - timedelta(days=15), "B")]
+    def test_28_days_inclusive_and_29_days_expired(self):
+        history = [entry(MONDAY - timedelta(days=28), "A"), entry(MONDAY - timedelta(days=29), "B")]
         plan = build_plan(report(candidate("A"), candidate("B")), history, ["月"], MONDAY)
         self.assertEqual(plan["meals"][0]["recipe"]["recipe_id"], "B")
         self.assertEqual(plan["history_exclusions"][0]["recipe_ids"], ["A"])
 
-    def test_window_moves_with_meal_date(self):
+    def test_window_is_fixed_for_entire_week(self):
         history = [entry(MONDAY - timedelta(days=13), "A")]
         plan = build_plan(report(candidate("A")), history, ["月", "金"], MONDAY)
         self.assertIsNone(plan["meals"][0]["recipe"])
-        self.assertEqual(plan["meals"][1]["recipe"]["recipe_id"], "A")
+        self.assertIsNone(plan["meals"][1]["recipe"])
 
-    def test_assignment_does_not_waste_scarce_eligible_recipe(self):
-        history = [entry(MONDAY - timedelta(days=14), "B")]
-        plan = build_plan(report(candidate("A"), candidate("B")), history, ["月", "火"], MONDAY)
+    def test_assignment_respects_calendar_month_limit(self):
+        # 月曜には月の上限で使えない候補を、翌月の火曜に割り当てる。
+        start = date(2026, 8, 31)
+        history = [dict(entry(date(2026, 8, 1), "old"), title="タコライス")]
+        taco = dict(candidate("B"), title="タコライス")
+        plan = build_plan(report(candidate("A"), taco), history, ["月", "火"], start)
         self.assertEqual(plan["status"], "draft_ready")
         self.assertEqual([m["recipe"]["recipe_id"] for m in plan["meals"]], ["A", "B"])
 
