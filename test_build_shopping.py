@@ -5,7 +5,7 @@ import unittest
 from fractions import Fraction
 from pathlib import Path
 
-from build_shopping import assemble, amount_text, generate_page, render_html, scale_ingredients
+from build_shopping import assemble, amount_text, generate_page, render_html, render_markdown, scale_ingredients
 
 BASE = Path(__file__).resolve().parent
 
@@ -64,29 +64,72 @@ class ShoppingTests(unittest.TestCase):
         self.assertEqual(items['片栗粉']['quantities'], {'小さじ': '27/2'})
         self.assertEqual(len(items['片栗粉']['as_needed']), 1)
         self.assertEqual(len(items['サラダ油']['as_needed']), 2)
-        self.assertIn('別途', items['片栗粉']['display'])
+        self.assertEqual(items['片栗粉']['display'], '大さじ4＋小さじ1と1/2＋不明')
         self.assertNotIn('練乳', items)
-        self.assertEqual(items['塩']['display'], '少々')
+        self.assertEqual(items['塩']['display'], '不明')
 
-    def test_missing_or_unverified_stops(self):
+    def test_missing_or_unverified_keeps_recipe_with_unknown_amounts(self):
+        plan = copy.deepcopy(self.plan)
+        plan['meals'][-1]['recipe']['ingredient_names'] = ['玉ねぎ', '★醤油']
         details = copy.deepcopy(self.details)
         details['recipes'].pop()
-        with self.assertRaises(ValueError):
-            assemble(self.plan, details)
+        data = assemble(plan, details)
+        self.assertEqual(len(data['meals']), 4)
+        self.assertEqual([i['name'] for i in data['meals'][-1]['ingredients']], ['玉ねぎ', 'しょうゆ'])
+        self.assertTrue(all(i['display'] == '不明' for i in data['meals'][-1]['ingredients']))
         details = copy.deepcopy(self.details)
         details['recipes'][0]['verified'] = False
-        with self.assertRaises(ValueError):
-            assemble(self.plan, details)
+        self.assertTrue(all(i['display'] == '不明' for i in assemble(plan, details)['meals'][0]['ingredients']))
 
-    def test_bad_source_and_unknown_amount_stops(self):
+    def test_bad_source_still_stops(self):
         details = copy.deepcopy(self.details)
         details['recipes'][0]['source_url'] = 'javascript:alert(1)'
         with self.assertRaises(ValueError):
             assemble(self.plan, details)
-        detail = copy.deepcopy(self.details['recipes'][0])
-        detail['ingredients'][0]['amount'] = None
+
+    def test_unconvertible_cached_values_are_unknown(self):
+        for amount, unit in [(None, '個'), ('1/0', 'g'), ('0', 'g'), ('-1', 'g'),
+                             ('1〜2', '個'), ('nan', 'g'), ('2', '未対応')]:
+            with self.subTest(amount=amount, unit=unit):
+                detail = copy.deepcopy(self.details['recipes'][0])
+                detail['ingredients'][0].update(amount=amount, unit=unit)
+                rows = scale_ingredients(detail, 3)
+                self.assertEqual(rows[0]['display'], '不明')
+                self.assertIsNone(rows[0]['amount'])
+                self.assertEqual(rows[1]['display'], '小さじ1')
+        for servings in [None, '2', '2〜4', 0, -1, True]:
+            with self.subTest(servings=servings):
+                detail = copy.deepcopy(self.details['recipes'][0])
+                detail['source_servings'] = servings
+                self.assertTrue(all(i['display'] == '不明' for i in scale_ingredients(detail, 3)))
         with self.assertRaises(ValueError):
-            scale_ingredients(detail, 3)
+            scale_ingredients(self.details['recipes'][0], 0)
+
+    def test_known_plus_unknown_html_markdown_and_json(self):
+        plan, details = copy.deepcopy(self.plan), copy.deepcopy(self.details)
+        for index, detail in enumerate(details['recipes']):
+            detail['source_servings'] = 3
+            detail['ingredients'] = [dict(name='玉ねぎ', amount='1' if index == 0 else None, unit='個')]
+        data = assemble(plan, details)
+        onion = data['shopping'][0]
+        self.assertEqual(onion['display'], '1個＋不明')
+        self.assertEqual(onion['quantities'], {'個': '1'})
+        self.assertEqual(len(onion['as_needed']), 3)
+        self.assertFalse(data['source_quantities_verified'])
+        html = render_html(data, (BASE / 'templates/weekly.html').read_text(encoding='utf-8'))
+        self.assertIn('玉ねぎ：1個＋不明', html)
+        self.assertIn('玉ねぎ：不明', html)
+        self.assertIn('玉ねぎ：1個＋不明', render_markdown(data))
+        self.assertEqual(html.count('楽天レシピで作り方を見る'), 4)
+        self.assertIn('data-key=', html)
+
+    def test_no_ingredient_names_still_displays_source_and_unknown(self):
+        data = assemble(self.plan, {'recipes': []})
+        html = render_html(data, (BASE / 'templates/weekly.html').read_text(encoding='utf-8'))
+        self.assertEqual(html.count('材料・分量：不明'), 4)
+        self.assertEqual(html.count('元レシピは人数不明'), 4)
+        self.assertNotIn('None', html)
+        self.assertFalse(data['source_quantities_verified'])
 
     def test_html_escapes_titles(self):
         data = assemble(self.plan, self.details)
@@ -103,7 +146,9 @@ class ShoppingTests(unittest.TestCase):
             (root / 'data').mkdir()
             (root / 'output').mkdir()
             (root / 'data/weekly_plan.json').write_text(json.dumps(self.plan), encoding='utf-8')
-            (root / 'data/recipe_details.json').write_text('{"recipes": []}', encoding='utf-8')
+            bad = copy.deepcopy(self.details)
+            bad['recipes'][0]['source_url'] = 'https://example.invalid/'
+            (root / 'data/recipe_details.json').write_text(json.dumps(bad), encoding='utf-8')
             output = root / 'output/weekly-preview.html'
             output.write_text('previous', encoding='utf-8')
             with self.assertRaises(ValueError):

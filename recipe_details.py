@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from build_shopping import UNITS, scale_ingredients
+from build_shopping import UNITS, scale_ingredients, ingredient_name, ingredient_heading
 
 
 def normalized(text):
@@ -53,9 +53,7 @@ def recipes_in(value):
 
 def ingredient(name, quantity, servings):
     raw_name, raw_quantity = name, quantity
-    name = re.sub(r"^[★☆●○◎◆◇■□△▲・*\s]+", "", normalized(name))
-    name = {"醤油": "しょうゆ", "醬油": "しょうゆ", "しょう油": "しょうゆ", "鶏挽肉": "鶏ひき肉",
-            "塩コショウ": "塩・こしょう", "塩こしょう": "塩・こしょう"}.get(name, name)
+    name = ingredient_name(normalized(name))
     quantity = re.sub(r"\s+", "", normalized(quantity)).replace("cc", "ml").replace("センチ", "cm")
     if not name:
         raise ValueError("材料名が空欄です。")
@@ -129,28 +127,28 @@ def parse_detail(html, recipe, checked_on):
         raise ValueError("元レシピを一意に確認できません。")
     original = found[0]
     match = re.fullmatch(r"([1-9]\d?)(?:人分)?", normalized(original.get("recipeYield", "")))
-    if not match:
-        raise ValueError("元の人数が範囲表記などのため、自動換算できません。")
-    servings = int(match.group(1))
-    names = sorted({normalized(n) for n in recipe["ingredient_names"]}, key=len, reverse=True)
-    rows, matched = [], set()
+    servings = int(match.group(1)) if match else None
+    names = list(dict.fromkeys(normalized(n) for n in recipe.get("ingredient_names", []) if normalized(n)))
     ingredients = original.get("recipeIngredient")
-    if not isinstance(ingredients, list) or not ingredients:
-        raise ValueError("元の材料一覧がありません。")
-    for text in ingredients:
-        text = normalized(text)
-        heading = re.fullmatch(r"【[^】]*(?:材料|調味料|たれ|タレ|あん|ソース|トッピング)[^】]*】|[●★◆].+の材料", text)
-        if text in names and heading:
-            # 元ページとAPI双方にある、量を持たない調味料グループの見出し。
-            matched.add(text)
-            continue
-        name = next((n for n in names if text.startswith(n + " ")), None)
-        if name is None:
-            raise ValueError("APIの材料と元レシピの材料が一致しません。")
-        matched.add(name)
-        rows.extend(ingredient(name, text[len(name):].strip(), servings))
-    if matched != set(names):
-        raise ValueError("元レシピに不足している材料があります。")
+    texts = [normalized(text) for text in ingredients if isinstance(text, str)] if isinstance(ingredients, list) else []
+    # 材料名の境界が一致した行だけ採用し、欠落・重複・曖昧な量は材料ごとに不明にする。
+    quantities = {name: [] for name in names if not ingredient_heading(name)}
+    for text in texts:
+        name = next((name for name in sorted(quantities, key=len, reverse=True)
+                     if text == name or text.startswith(name + " ")), None)
+        if name is not None:
+            quantities[name].append(text[len(name):].strip())
+    rows = []
+    for name, values in quantities.items():
+        quantity = values[0] if len(values) == 1 else ""
+        try:
+            if servings is None:
+                raise ValueError("元の人数が不明です。")
+            parsed = ingredient(name, quantity, servings)
+        except ValueError:
+            parsed = [{"name": ingredient_name(name), "original_name": name, "original_quantity": quantity,
+                       "amount": None, "unit": "", "note": "不明"}]
+        rows.extend(parsed)
     detail = {"recipe_id": recipe_id, "source_url": url, "source_servings": servings,
               "ingredients": rows, "verified": True, "verified_on": checked_on.isoformat(),
               "automatically_read": True, "verification_method": "元レシピの構造化データとAPIの材料名を照合",
@@ -174,5 +172,5 @@ def fetch_detail(recipe, checked_on):
         return parse_detail(body.decode("utf-8"), recipe, checked_on)
     except HTTPError as error:
         raise ValueError(f"元レシピを取得できません（HTTP {error.code}）。") from None
-    except (URLError, TimeoutError, UnicodeError):
+    except (URLError, OSError, UnicodeError):
         raise ValueError("元レシピに接続できませんでした。") from None

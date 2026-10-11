@@ -1,6 +1,8 @@
 """確認済みの元分量を人数換算し、買い物リスト付きの献立プレビューを生成。"""
 
 import json
+import re
+import unicodedata
 import sys
 from collections import defaultdict
 from fractions import Fraction
@@ -42,33 +44,48 @@ def source_link(detail, recipe_id):
     return url
 
 
+def ingredient_name(name):
+    name = re.sub(r"^[★☆●○◎◆◇■□△▲・*\s]+", "", unicodedata.normalize("NFKC", name).strip())
+    return {"醤油": "しょうゆ", "醬油": "しょうゆ", "しょう油": "しょうゆ", "鶏挽肉": "鶏ひき肉",
+            "塩コショウ": "塩・こしょう", "塩こしょう": "塩・こしょう"}.get(name, name)
+
+
+def ingredient_heading(name):
+    return bool(re.fullmatch(r"【[^】]*(?:材料|調味料|たれ|タレ|あん|ソース|トッピング)[^】]*】|[●★◆].+の材料", name))
+
+
+def unknown_detail(recipe):
+    """APIの材料名を保持し、取得できない分量は推測しない。"""
+    return {"recipe_id": recipe["recipe_id"],
+            "source_url": f'https://recipe.rakuten.co.jp/recipe/{recipe["recipe_id"]}/',
+            "source_servings": None, "verified": False, "verified_on": "",
+            "ingredients": [{"name": ingredient_name(name), "amount": None, "unit": "", "note": "不明"}
+                            for name in recipe.get("ingredient_names", [])
+                            if isinstance(name, str) and ingredient_name(name) and not ingredient_heading(name)],
+            "notes": ["分量は不明です。材料・人数・作り方は元レシピをご確認ください。"]}
+
+
 def scale_ingredients(detail, servings):
     base = detail.get("source_servings")
-    if (detail.get("verified") is not True or type(base) is not int or base <= 0
-            or type(servings) is not int or servings <= 0):
-        raise ValueError("人数と元の分量が確認できないレシピは換算できません。")
-    if not detail.get("ingredients"):
-        raise ValueError("確認済みの材料がありません。")
+    if type(servings) is not int or servings <= 0:
+        raise ValueError("換算先の人数を確認してください。")
+    can_scale = detail.get("verified") is True and type(base) is int and base > 0
     result = []
-    for item in detail["ingredients"]:
+    for item in detail.get("ingredients", []):
         if not isinstance(item.get("name"), str) or not item["name"].strip():
             raise ValueError("材料名を確認してください。")
         note, unit = item.get("note", ""), item.get("unit", "")
         if not isinstance(note, str):
             raise ValueError("材料の注記を確認してください。")
-        if item.get("amount") is None:
-            if unit or not any(word in note for word in ("少々", "適量", "少量")):
-                raise ValueError("数量不明の材料があります。確認データに分量を追加してください。")
-            amount, text = None, note
-        else:
-            if unit not in UNITS:
-                raise ValueError("未対応の単位です。単位を確認してください。")
+        amount = None
+        if can_scale and item.get("amount") is not None and unit in UNITS:
             try:
                 amount = Fraction(str(item["amount"])) * Fraction(servings, base)
             except (ValueError, ZeroDivisionError):
-                raise ValueError("材料の数量を確認してください。") from None
-            if amount <= 0:
-                raise ValueError("材料の数量は正の数で指定してください。")
+                pass
+        if amount is None or amount <= 0:
+            amount, text, unit, note = None, "不明", "", "不明"
+        else:
             text = amount_text(amount, unit)
             if note:
                 text += f"（{note}）"
@@ -93,13 +110,15 @@ def assemble(plan, details):
             raise ValueError("献立案のレシピを確認してください。")
         detail = lookup.get(recipe["recipe_id"])
         if detail is None:
-            raise ValueError(f"分量未確認のレシピがあります: {recipe['recipe_id']}。元レシピを確認してください。")
+            detail = unknown_detail(recipe)
         url = source_link(detail, recipe["recipe_id"])
+        if not detail.get("ingredients"):
+            detail = unknown_detail(recipe)
         ingredients = scale_ingredients(detail, servings)
         meals.append({"date": meal["date"], "weekday": meal["weekday"],
                       "recipe_id": recipe["recipe_id"], "title": recipe["title"],
                       "author": recipe.get("author", ""), "source_url": url,
-                      "source_servings": detail["source_servings"], "verified_on": detail["verified_on"],
+                      "source_servings": detail.get("source_servings"), "verified_on": detail.get("verified_on", ""),
                       "automatically_read": detail.get("automatically_read", False),
                       "ingredients": ingredients, "notes": detail.get("notes", []),
                       "price_reasons": recipe.get("price_reasons", [])})
@@ -122,27 +141,33 @@ def assemble(plan, details):
         if total["approximate"]:
             text += "（目安）"
         if total["as_needed"]:
-            qualitative = "・".join(word for word in ("適量", "少々", "少量")
-                                   if any(word in item["note"] for item in total["as_needed"]))
-            text += (" ＋ 別途" if text else "") + qualitative
+            text += ("＋" if text else "") + "不明"
         shopping.append({"name": name, "display": text,
                          "quantities": {unit: str(amount) for unit, amount in total["numeric"].items()},
                          "approximate": total["approximate"], "as_needed": total["as_needed"],
                          "used_on": total["used_on"]})
     return {"week_start": plan["week_start"], "target_servings": servings,
-            "source_quantities_verified": True, "meals": meals, "shopping": shopping}
+            "source_quantities_verified": all(m["ingredients"] and all(i["amount"] is not None for i in m["ingredients"]) for m in meals), "meals": meals, "shopping": shopping}
+
+
+def source_servings_text(meal):
+    value = meal.get("source_servings")
+    return f"{value}人分" if type(value) is int and value > 0 else "人数不明"
 
 
 def render_html(data, template):
     cards, shopping = [], []
     for meal in data["meals"]:
         checked_label = "元レシピ取得" if meal.get("automatically_read") else "分量確認"
+        checked = f' {checked_label}：{escape(meal["verified_on"])}' if meal.get("verified_on") else ""
         items = "".join(f"<li>{escape(i['name'])}：{escape(i['display'])}</li>" for i in meal["ingredients"])
+        if not items:
+            items = "<li>材料・分量：不明（元レシピをご確認ください）</li>"
         notes = "".join(f'<p class="note">{escape(note)}</p>' for note in meal["notes"])
         notes += "".join(f'<p class="note">選んだ理由：{escape(reason)}</p>' for reason in meal.get("price_reasons", []))
         cards.append(f'<article><span class="day">{escape(meal["date"])}（{escape(meal["weekday"])}）</span>'
                      f'<h2>{escape(meal["title"])}</h2><h3>材料（{data["target_servings"]}人分）</h3><ul>{items}</ul>'
-                     f'<p class="note">元レシピは{meal["source_servings"]}人分。{checked_label}：{escape(meal["verified_on"])}</p>'
+                     f'<p class="note">元レシピは{source_servings_text(meal)}。{checked}</p>'
                      f'{notes}<p><a href="{escape(meal["source_url"], quote=True)}" target="_blank" rel="noopener noreferrer">'
                      '楽天レシピで作り方を見る</a></p>'
                      f'<p class="note">レシピ提供：{escape(meal["author"])}</p></article>')
@@ -154,7 +179,7 @@ def render_html(data, template):
                         + (f'<small class="note">{escape(extra)}</small>' if extra else "") + '</span></label></li>')
     return Template(template).substitute(
         page_heading=f'{data["week_start"]}週の夕飯',
-        page_intro=f'{data["target_servings"]}人分・主菜{len(data["meals"])}日分。元レシピの人数から材料を比例換算しています。',
+        page_intro=f'{data["target_servings"]}人分・主菜{len(data["meals"])}日分。換算できる材料だけ比例換算しています。人数・分量が読み取れない材料は「不明」です。調理時は元レシピをご確認ください。',
         meal_cards="\n".join(cards), shopping_items="\n".join(shopping))
 
 
@@ -168,7 +193,7 @@ def render_markdown(data):
         lines.append(line)
     lines += ["", "元レシピ・分量確認日：", ""]
     for meal in data["meals"]:
-        lines.append(f'- {meal["weekday"]}：[元レシピ（{meal["source_servings"]}人分）]({meal["source_url"]}) / {meal["verified_on"]}')
+        lines.append(f'- {meal["weekday"]}：[元レシピ（{source_servings_text(meal)}）]({meal["source_url"]}) / {meal["verified_on"]}')
     return "\n".join(lines) + "\n"
 
 

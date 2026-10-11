@@ -15,7 +15,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 import webbrowser
 
-from build_shopping import assemble, render_html, render_markdown, scale_ingredients, source_link
+from build_shopping import assemble, render_html, render_markdown, source_link, unknown_detail
 from food_prices import load_prices, price_settings, render_report, score_recipe
 from plan_week import DAY_OFFSETS, build_plan, parse_date, record_plan, validate_history, write_preview
 from recipe_details import fetch_detail
@@ -110,13 +110,9 @@ def prepare(base, work, start, today, cached=False):
                  "data/food_prices.md": render_report(prices, pricing, today)}
     print("2/4 楽天レシピから献立を選んでいます。", flush=True)
     pool = read_json(base / "data/dinner_pool.json") if cached else collect(base, prices, pricing, today, preferences)
-    rejected, expanded = {}, False
+    expanded = False
     while True:
         report = candidates(pool, prices, pricing, preferences, today)
-        for recipe in report["recipes"]:
-            if recipe["recipe_id"] in rejected:
-                recipe["status"] = "hold"
-                recipe["reasons"].append("分量の確認が必要: " + rejected[recipe["recipe_id"]])
         plan = build_plan(report, history, weekdays, start, prices, pricing, preferences)
         if plan["status"] != "draft_ready":
             if not expanded and not cached:
@@ -124,30 +120,30 @@ def prepare(base, work, start, today, cached=False):
                 pool = collect(base, prices, pricing, today, preferences, EXTRA_CATEGORIES)
                 expanded = True
                 continue
-            raise ValueError("条件と分量を満たす主菜が4日分そろいませんでした。現在のHTMLと履歴は残しています。")
-        new_rejections = False
-        for meal in plan["meals"]:
-            recipe = meal["recipe"]
-            key = recipe["recipe_id"]
-            if key in lookup:
-                source_link(lookup[key], key)
-                scale_ingredients(lookup[key], 3)
+            raise ValueError("献立の条件を満たす主菜が4日分そろいませんでした。現在のHTMLと履歴は残しています。")
+        break
+    artifacts.update({"data/dinner_pool.json": json_text(pool),
+                      "data/dinner_candidates.json": json_text(report),
+                      "data/dinner_candidates.md": render_candidates(report, prices, pricing, today)})
+    # 選定はここまで。分量の取得結果で候補の除外・再抽選を行わない。
+    for meal in plan["meals"]:
+        recipe = meal["recipe"]
+        key = recipe["recipe_id"]
+        if key in lookup:
+            source_link(lookup[key], key)
+            if cached or (lookup[key].get("verified") is True
+                          and type(lookup[key].get("source_servings")) is int
+                          and lookup[key]["source_servings"] > 0):
                 continue
-            try:
-                if cached:
-                    raise ValueError("保存済みの分量がありません。")
-                print("分量を確認: " + recipe["title"], flush=True)
-                time.sleep(1.1)
-                lookup[key] = fetch_detail(recipe, today)
-            except ValueError as error:
-                rejected[key] = str(error)
-                print("別の候補を探します: " + str(error), flush=True)
-                new_rejections = True
-        if not new_rejections:
-            artifacts.update({"data/dinner_pool.json": json_text(pool),
-                              "data/dinner_candidates.json": json_text(report),
-                              "data/dinner_candidates.md": render_candidates(report, prices, pricing, today)})
-            break
+        try:
+            if cached:
+                raise ValueError("保存済みの分量がありません。")
+            print("分量を確認: " + recipe["title"], flush=True)
+            time.sleep(1.1)
+            lookup[key] = fetch_detail(recipe, today)
+        except ValueError as error:
+            lookup[key] = unknown_detail(recipe)
+            print("分量は不明として採用します: " + recipe["title"] + " / " + str(error), flush=True)
     print("3/4 3人分の材料と買い物リストを作成しています。", flush=True)
     updated_history = record_plan(history, plan, preferences)
     details["recipes"] = list(lookup.values())

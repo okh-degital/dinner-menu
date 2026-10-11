@@ -7,7 +7,8 @@ import unittest
 from unittest.mock import patch
 
 import update_dinner as update
-from recipe_details import ingredient, parse_detail
+from recipe_details import ingredient, parse_detail, fetch_detail
+from build_shopping import scale_ingredients
 import test_build_shopping as shopping_fixtures
 
 
@@ -29,17 +30,46 @@ class RecipeDetailsTests(unittest.TestCase):
                          [("豚肉", "200", "g"), ("しょうゆ", "1/2", "大さじ"), ("ご飯", "2", "人分")])
         self.assertTrue(result["automatically_read"])
 
-    def test_range_or_ambiguous_quantity_never_guessed(self):
-        for changes in [{"recipeYield": "2〜4"}, {"recipeYield": "たっぷり2"},
-                        {"recipeIngredient": ["豚肉 200〜300g", "★醤油 大さじ1", "ご飯 人数分"]}]:
-            with self.subTest(changes=changes), self.assertRaises(ValueError):
-                parse_detail(self.page(**changes), self.recipe(), date(2026, 9, 27))
+    def test_unknown_servings_keeps_names_without_guessing(self):
+        for servings in ['2〜4', 'たっぷり2', '', None, ['2'], 0]:
+            with self.subTest(servings=servings):
+                detail = parse_detail(self.page(recipeYield=servings), self.recipe(), date(2026, 9, 27))
+                self.assertIsNone(detail['source_servings'])
+                rows = scale_ingredients(detail, 3)
+                self.assertEqual([r['name'] for r in rows], ['豚肉', 'しょうゆ', 'ご飯'])
+                self.assertTrue(all(r['display'] == '不明' for r in rows))
 
-    def test_wrong_recipe_and_missing_material_stop(self):
-        for page in [self.page().replace('/recipe/123/', '/recipe/999/'),
-                     self.page(name="別の料理"), self.page(recipeIngredient=["豚肉 200g"])]:
+    def test_ambiguous_or_missing_quantity_only_affects_that_material(self):
+        for quantity in ['200〜300g', '大さじ1弱', '1/0g', '0g', '適量', '少々', '少量', 'お好みで', '']:
+            with self.subTest(quantity=quantity):
+                detail = parse_detail(self.page(recipeIngredient=['豚肉 ' + quantity, '★醤油 大さじ1', 'ご飯 人数分']),
+                                      self.recipe(), date(2026, 9, 27))
+                rows = scale_ingredients(detail, 3)
+                self.assertEqual(rows[0]['display'], '不明')
+                self.assertEqual(rows[1]['amount'], '3/2')
+                self.assertEqual(rows[2]['display'], '3人分')
+
+    def test_wrong_recipe_stops_reading_but_missing_material_is_unknown(self):
+        for page in [self.page().replace('/recipe/123/', '/recipe/999/'), self.page(name='別の料理')]:
             with self.assertRaises(ValueError):
                 parse_detail(page, self.recipe(), date(2026, 9, 27))
+        detail = parse_detail(self.page(recipeIngredient=['豚肉 200g']), self.recipe(), date(2026, 9, 27))
+        rows = scale_ingredients(detail, 3)
+        self.assertEqual([r['display'] for r in rows], ['300g', '不明', '不明'])
+
+    def test_missing_mismatched_and_duplicate_source_rows_are_unknown(self):
+        for ingredients in [None, [], ['別の材料 200g'], ['豚肉 100g', '豚肉 200g']]:
+            with self.subTest(ingredients=ingredients):
+                detail = parse_detail(self.page(recipeIngredient=ingredients), self.recipe(), date(2026, 9, 27))
+                self.assertTrue(all(r['display'] == '不明' for r in scale_ingredients(detail, 3)))
+
+    def test_network_read_failure_becomes_quantity_failure(self):
+        from urllib.error import HTTPError, URLError
+        for error in [HTTPError('url', 403, 'forbidden', {}, None), URLError('offline'),
+                      TimeoutError(), ConnectionResetError()]:
+            with self.subTest(error=type(error).__name__), patch('recipe_details.urlopen', side_effect=error):
+                with self.assertRaises(ValueError):
+                    fetch_detail(self.recipe(), date(2026, 9, 27))
 
     def test_qualitative_each_sizes_and_kg(self):
         self.assertEqual(ingredient("油", "適量", 2)[0]["amount"], None)
@@ -72,8 +102,9 @@ class RecipeDetailsTests(unittest.TestCase):
                                           '●サルサソースの材料', 'ご飯 人数分'])
         self.assertEqual(len(parse_detail(page, recipe, date(2026, 9, 27))['ingredients']), 3)
         recipe['ingredient_names'].append('【にんじん】')
-        with self.assertRaises(ValueError):
-            parse_detail(page, recipe, date(2026, 9, 27))
+        rows = parse_detail(page, recipe, date(2026, 9, 27))['ingredients']
+        self.assertEqual(rows[-1]['name'], '【にんじん】')
+        self.assertIsNone(rows[-1]['amount'])
 
 
 class UpdateTests(unittest.TestCase):
@@ -129,14 +160,57 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(len(json.loads(artifacts["history.json"])), 4)
         self.assertEqual(len(json.loads(artifacts["data/shopping_list.json"])["meals"]), 4)
 
-    def test_missing_detail_and_insufficient_candidates_preserve_html_and_history(self):
-        self.write("history.json", [])
-        self.write("data/recipe_details.json", {"recipes": []})
-        self.write("data/dinner_pool.json", {"fetched_at": "2026-09-27", "recipes": [m["recipe"] for m in self.plan["meals"]]})
-        with self.assertRaisesRegex(ValueError, "そろいません"):
-            self.prepare()
-        self.assertEqual((self.base / "output/index.html").read_text(), "previous")
-        self.assertEqual(update.read_json(self.base / "history.json"), [])
+    def test_all_missing_details_generate_four_days_from_cache(self):
+        self.write('history.json', [])
+        (self.base / 'data/recipe_details.json').unlink()
+        with patch.object(update, 'fetch_detail') as fetch, patch.object(update, 'collect') as collect:
+            artifacts, _ = self.prepare()
+        fetch.assert_not_called()
+        collect.assert_not_called()
+        data = json.loads(artifacts['data/shopping_list.json'])
+        self.assertEqual(len(data['meals']), 4)
+        self.assertEqual(data['shopping'][0]['display'], '不明')
+        self.assertEqual(artifacts['output/index.html'].count('<article>'), 4)
+        self.assertIn('鶏肉：不明', artifacts['output/index.html'])
+        self.assertIn('鶏肉：不明', artifacts['data/shopping_list.md'])
+        self.assertEqual(len(json.loads(artifacts['history.json'])), 4)
+        self.assertEqual((self.base / 'output/index.html').read_text(), 'previous')
+        self.assertEqual(update.read_json(self.base / 'history.json'), [])
+        # 実際に生成ファイルを保存し、そのHTML自体も検査する（テスト用フォルダのみ）。
+        update.install_artifacts(self.base, artifacts)
+        saved = (self.base / 'output/index.html').read_text(encoding='utf-8')
+        self.assertIn('鶏肉：不明', saved)
+        self.assertEqual(saved.count('楽天レシピで作り方を見る'), 4)
+
+    def test_all_fetch_failures_keep_selected_ids_without_reselection(self):
+        self.write('data/recipe_details.json', {'recipes': []})
+        pool = update.read_json(self.base / 'data/dinner_pool.json')
+        with patch.object(update, 'collect', return_value=pool) as collect, \
+                patch.object(update, 'fetch_detail', side_effect=ValueError('取得失敗')) as fetch, \
+                patch.object(update, 'build_plan', wraps=update.build_plan) as build, patch.object(update.time, 'sleep'):
+            artifacts, _ = self.prepare(cached=False)
+        collect.assert_called_once()
+        build.assert_called_once()
+        self.assertEqual(fetch.call_count, 4)
+        plan = json.loads(artifacts['data/weekly_plan.json'])
+        self.assertEqual({m['recipe']['recipe_id'] for m in plan['meals']}, {'1', '2', '3', '4'})
+        self.assertTrue(all(r['status'] == 'candidate' for r in json.loads(artifacts['data/dinner_candidates.json'])['recipes']))
+        self.assertEqual(artifacts['output/index.html'].count('<article>'), 4)
+        self.assertIn('鶏肉：不明', artifacts['output/index.html'])
+
+    def test_unknown_cache_is_retried_on_next_live_run(self):
+        self.write('data/recipe_details.json', {'recipes': []})
+        artifacts, _ = self.prepare()
+        self.write('data/recipe_details.json', json.loads(artifacts['data/recipe_details.json']))
+        pool = update.read_json(self.base / 'data/dinner_pool.json')
+        lookup = {d['recipe_id']: d for d in shopping_fixtures.ShoppingTests.details['recipes']}
+        with patch.object(update, 'collect', return_value=pool), patch.object(update.time, 'sleep'), \
+                patch.object(update, 'fetch_detail', side_effect=lambda recipe, today: lookup[recipe['recipe_id']]) as fetch:
+            artifacts, _ = self.prepare(cached=False)
+        self.assertEqual(fetch.call_count, 4)
+        data = json.loads(artifacts['data/shopping_list.json'])
+        egg = next(i for i in data['shopping'] if i['name'] == '卵')
+        self.assertEqual(egg['display'], '2個')
 
     def test_four_week_shortage_preserves_existing_html_and_history(self):
         # 27日前のIDは、当週の再抽選でも復活させない。
@@ -148,11 +222,10 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual((self.base / "output/index.html").read_text(), "previous")
         self.assertEqual(update.read_json(self.base / "history.json"), history)
 
-    def test_one_unreadable_recipe_replaced_without_relaxing_rules(self):
+    def test_one_unreadable_recipe_kept_with_other_known_amounts(self):
         self.write("history.json", [])
         self.write("data/recipe_details.json", {"recipes": []})
         recipes = [dict(m["recipe"], recipe_id=str(i), title=f"料理{i}") for i, m in enumerate(self.plan["meals"], 1)]
-        recipes.append(dict(recipes[0], recipe_id="5", title="料理5"))
         pool = {"fetched_at": "2026-09-27", "recipes": recipes}
         def detail(recipe, today):
             if recipe["recipe_id"] == "1":
@@ -163,7 +236,11 @@ class UpdateTests(unittest.TestCase):
         with patch.object(update, "collect", return_value=pool), patch.object(update, "fetch_detail", side_effect=detail), patch.object(update.time, "sleep"):
             artifacts, _ = self.prepare(cached=False)
         plan = json.loads(artifacts["data/weekly_plan.json"])
-        self.assertEqual({m["recipe"]["recipe_id"] for m in plan["meals"]}, {"2", "3", "4", "5"})
+        self.assertEqual({m["recipe"]["recipe_id"] for m in plan["meals"]}, {"1", "2", "3", "4"})
+        data = json.loads(artifacts['data/shopping_list.json'])
+        unknown = next(m for m in data['meals'] if m['recipe_id'] == '1')
+        self.assertEqual(unknown['ingredients'][0]['display'], '不明')
+        self.assertTrue(any(i['amount'] is not None for m in data['meals'] for i in m['ingredients']))
 
     def test_partial_history_regenerated_without_saved_plan(self):
         self.write("history.json", self.history[:1])
