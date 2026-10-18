@@ -82,5 +82,33 @@
     "recipe_id": "1150023642",
     "title": "巻かずに簡単！チーズがとろ～り！とん平焼き",
     "status": "planned"
+  },
+  {
+    "date": "2026-10-19",
+    "source": "rakuten_recipe",
+    "recipe_id": "1710041152",
+    "title": "お店の味を再現！ネギ玉牛丼",
+    "status": "planned"
+  },
+  {
+    "date": "2026-10-20",
+    "source": "rakuten_recipe",
+    "recipe_id": "1560004245",
+    "title": "簡単おいしい！我が家のチンジャオロース（青椒肉絲）",
+    "status": "planned"
+  },
+  {
+    "date": "2026-10-21",
+    "source": "rakuten_recipe",
+    "recipe_id": "1650018014",
+    "title": "冷凍サバの焼き方（フライパン）",
+    "status": "planned"
+  },
+  {
+    "date": "2026-10-23",
+    "source": "rakuten_recipe",
+    "recipe_id": "1180011286",
+    "title": "白菜と厚揚げのうま煮",
+    "status": "planned"
   }
 ]
