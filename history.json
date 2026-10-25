@@ -114,41 +114,41 @@
   {
     "date": "2026-10-26",
     "source": "rakuten_recipe",
-    "recipe_id": "1860004400",
-    "title": "圧力鍋で時短！手羽元と大根のこってり煮♪",
+    "recipe_id": "1670016370",
+    "title": "おうちで居酒屋さんの味‼︎おいしい手羽先の唐揚げ",
     "status": "planned",
     "categories": [
-      "手羽元"
+      "手羽先"
     ]
   },
   {
     "date": "2026-10-27",
     "source": "rakuten_recipe",
-    "recipe_id": "1090053791",
-    "title": "今日は、豚バラ肉とキムチのみ♬簡単！！豚キムチ",
+    "recipe_id": "1760011898",
+    "title": "合挽き肉とかぼちゃの甘辛煮＋＋",
     "status": "planned",
     "categories": [
-      "豚バラ肉"
+      "合い挽き肉"
     ]
   },
   {
     "date": "2026-10-28",
     "source": "rakuten_recipe",
-    "recipe_id": "1880011396",
-    "title": "ドンキー風 簡単♡イカの箱舟",
+    "recipe_id": "1920004913",
+    "title": "ふっくら♪和風ピーマンの肉詰め",
     "status": "planned",
     "categories": [
-      "いか"
+      "合い挽き肉"
     ]
   },
   {
     "date": "2026-10-30",
     "source": "rakuten_recipe",
-    "recipe_id": "1720045046",
-    "title": "白身魚の天ぷら",
+    "recipe_id": "1860003944",
+    "title": "フライパンひとつで作るアジの簡単照り焼き♪",
     "status": "planned",
     "categories": [
-      "たら"
+      "あじ"
     ]
   }
 ]
