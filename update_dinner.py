@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
+import random
 from pathlib import Path
 import subprocess
 import sys
@@ -13,7 +14,6 @@ import tempfile
 import time
 from urllib.error import URLError
 from urllib.request import Request, urlopen
-import webbrowser
 
 from build_shopping import assemble, render_html, render_markdown, source_link, unknown_detail
 from food_prices import load_prices, price_settings, render_report, score_recipe
@@ -26,6 +26,22 @@ PUBLIC_URL = "https://okh-degital.github.io/dinner-menu/"
 REPOSITORY = "okh-degital/dinner-menu"
 PUBLISH_FILES = ("output/index.html", "history.json")
 EXTRA_CATEGORIES = ("鶏むね肉", "豚薄切り肉", "鮭", "さば", "厚揚げ")
+REDRAW_CATEGORIES = ("鶏むね肉", "鶏もも肉", "ささみ", "手羽元", "手羽先", "豚こま切れ肉",
+                     "豚薄切り肉", "豚バラ肉", "豚ひき肉", "牛肉", "合い挽き肉", "鮭", "さば",
+                     "ぶり", "たら", "あじ", "えび", "いか", "厚揚げ", "木綿豆腐", "卵料理")
+
+
+def redraw_categories(previous_plan, already=()):
+    """固定のランキングを往復しないよう、前回取得していないカテゴリから追加する。"""
+    previous_plan = previous_plan or {}
+    used = set(previous_plan.get("redraw_fetched_categories", []))
+    excluded = set(already)
+    for meal in previous_plan.get("meals", []):
+        excluded.update(meal.get("recipe", {}).get("categories", []))
+    choices = [name for name in REDRAW_CATEGORIES if name not in excluded]
+    random.shuffle(choices)
+    choices.sort(key=lambda name: name in used)
+    return tuple(choices[:6])
 
 
 def read_json(path):
@@ -92,6 +108,8 @@ def prepare(base, work, start, today, cached=False):
         raise ValueError("対象曜日と週の月曜日を確認してください。")
     history = read_json(base / "history.json")
     validate_history(history)
+    plan_path = base / "data/weekly_plan.json"
+    previous_plan = read_json(plan_path) if plan_path.exists() else None
     print(f"対象: {start}週 / 3人分", flush=True)
     print("1/4 農水省の価格を確認しています。", flush=True)
     if cached or not pricing["enabled"]:
@@ -109,19 +127,27 @@ def prepare(base, work, start, today, cached=False):
     artifacts = {"data/food_prices.json": json_text(prices),
                  "data/food_prices.md": render_report(prices, pricing, today)}
     print("2/4 楽天レシピから献立を選んでいます。", flush=True)
-    pool = read_json(base / "data/dinner_pool.json") if cached else collect(base, prices, pricing, today, preferences)
+    rerun = any(start <= parse_date(item["date"]) < start + timedelta(days=7) for item in history)
+    extra_names = redraw_categories(previous_plan) if rerun else ()
+    pool = read_json(base / "data/dinner_pool.json") if cached else collect(base, prices, pricing, today, preferences, extra_names)
     expanded = False
     while True:
         report = candidates(pool, prices, pricing, preferences, today)
-        plan = build_plan(report, history, weekdays, start, prices, pricing, preferences)
+        plan = build_plan(report, history, weekdays, start, prices, pricing, preferences, previous_plan)
         if plan["status"] != "draft_ready":
             if not expanded and not cached:
                 print("候補が足りないため、肉・魚・豆腐のカテゴリを追加で確認します。", flush=True)
-                pool = collect(base, prices, pricing, today, preferences, EXTRA_CATEGORIES)
+                more_names = redraw_categories(previous_plan, extra_names) if rerun else EXTRA_CATEGORIES
+                pool = collect(base, prices, pricing, today, preferences, extra_names + more_names)
                 expanded = True
                 continue
-            raise ValueError("献立の条件を満たす主菜が4日分そろいませんでした。現在のHTMLと履歴は残しています。")
+            raise ValueError("献立の条件を満たす主菜が4日分そろいませんでした。現在のHTMLと履歴は残しています。同じ週に一度表示した料理は再利用しません。")
         break
+    plan["redraw_fetched_categories"] = [c["name"] for c in pool.get("categories", [])]
+    if plan.get("redraw_previous_categories"):
+        print("前回の楽天カテゴリを除外: " + "、".join(plan["redraw_previous_categories"]), flush=True)
+    if plan.get("reused_history"):
+        print("候補不足のため、過去4週間の料理も候補に戻して選びました。", flush=True)
     artifacts.update({"data/dinner_pool.json": json_text(pool),
                       "data/dinner_candidates.json": json_text(report),
                       "data/dinner_candidates.md": render_candidates(report, prices, pricing, today)})
@@ -250,10 +276,28 @@ def wait_for_public_page(marker, seconds=300):
     return False
 
 
+
+def open_in_chrome(destination):
+    """夕飯ページはChromeで開く。OSの既定ブラウザは変更しない。"""
+    roots = [os.environ.get('PROGRAMFILES', r'C:\Program Files'),
+             os.environ.get('PROGRAMFILES(X86)', r'C:\Program Files (x86)'),
+             os.environ.get('LOCALAPPDATA')]
+    for root in roots:
+        if not root:
+            continue
+        chrome = Path(root) / 'Google/Chrome/Application/chrome.exe'
+        if chrome.is_file():
+            subprocess.Popen([str(chrome), destination])
+            return True
+    print('Chromeが見つかりません。Chromeで次のページを開いてください: ' + destination,
+          file=sys.stderr)
+    return False
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="価格・献立・3人分のHTMLを一括更新")
     parser.add_argument("--publish", action="store_true", help="スマホ用GitHub Pagesも更新")
-    parser.add_argument("--open", action="store_true", help="完了後にページを開く")
+    parser.add_argument("--open", action="store_true", help="完了後にChromeでページを開く")
     parser.add_argument("--week-start", help="対象の月曜日。省略時は日本時間で次の月曜日（当日含む）")
     parser.add_argument("--cached", action="store_true", help="取得済みのデータだけでHTMLを作る")
     parser.add_argument("--check", action="store_true", help="別フォルダに試作し、HTML・履歴の本体と公開ページを変更しない")
@@ -295,7 +339,7 @@ def main(argv=None):
                 destination = (BASE_DIR / "output/index.html").as_uri()
                 print("パソコン内のHTMLを更新しました。公開する場合は--publishを付けます。", flush=True)
             if args.open:
-                webbrowser.open(destination)
+                open_in_chrome(destination)
             return 0
     except (ValueError, KeyError, TypeError, AttributeError, OSError) as error:
         message = str(error) if isinstance(error, ValueError) else "設定・データの形式またはファイルの読み書きを確認してください。"

@@ -120,7 +120,7 @@ class UpdateTests(unittest.TestCase):
         self.settings = {"weekdays": ["月", "火", "水", "金"], "food_prices": {"enabled": False}}
         self.history = update.record_plan([], self.plan)
         self.write("settings.json", self.settings)
-        self.write("history.json", self.history)
+        self.write("history.json", [])
         self.write("data/weekly_plan.json", self.plan)
         self.write("data/dinner_pool.json", {"fetched_at": "2026-09-27", "recipes": [m["recipe"] for m in self.plan["meals"]]})
         self.write("data/recipe_details.json", shopping_fixtures.ShoppingTests.details)
@@ -139,18 +139,46 @@ class UpdateTests(unittest.TestCase):
 
     def test_recorded_week_redraws_and_replaces_history(self):
         pool = update.read_json(self.base / "data/dinner_pool.json")
-        with patch.object(update, "collect", return_value=pool) as collect:
-            artifacts, marker = self.prepare(cached=False)
-        collect.assert_called_once()
-        self.assertEqual(len(json.loads(artifacts["history.json"])), 4)
-        self.assertEqual(artifacts["output/index.html"].count('<article>'), 4)
-        self.assertIn('材料（3人分）', artifacts["output/index.html"])
-        self.assertIn(marker, artifacts["output/index.html"])
-        self.assertEqual((self.base / "output/index.html").read_text(), "previous")
-        update.install_artifacts(self.base, artifacts)
-        again, second_marker = self.prepare()
-        self.assertNotEqual(marker, second_marker)
-        self.assertEqual(len(json.loads(again["history.json"])), 4)
+        pool['recipes'] += [dict(r, recipe_id=prefix + r['recipe_id']) for prefix in ['other-', 'third-'] for r in pool['recipes']]
+        self.write('data/dinner_pool.json', pool)
+        self.write('history.json', self.history)
+        previous = {r['recipe_id'] for r in self.history}
+        for _ in range(2):
+            artifacts, marker = self.prepare()
+            plan = json.loads(artifacts['data/weekly_plan.json'])
+            chosen = {m['recipe']['recipe_id'] for m in plan['meals']}
+            self.assertTrue(chosen.isdisjoint(previous))
+            self.assertEqual(len(json.loads(artifacts["history.json"])), 4)
+            self.assertEqual(artifacts["output/index.html"].count('<article>'), 4)
+            self.assertIn('材料（3人分）', artifacts["output/index.html"])
+            self.assertIn(marker, artifacts["output/index.html"])
+            update.install_artifacts(self.base, artifacts)
+            self.assertEqual({r['recipe_id'] for r in update.read_json(self.base / 'history.json')}, chosen)
+            previous |= chosen
+        self.assertEqual(len(previous), 12)
+        before = (self.base / 'data/weekly_plan.json').read_bytes()
+        with self.assertRaisesRegex(ValueError, 'そろいません'):
+            self.prepare()
+        self.assertEqual((self.base / 'data/weekly_plan.json').read_bytes(), before)
+
+    def test_redraw_shortage_preserves_files_and_does_not_publish(self):
+        self.write('history.json', self.history)
+        names = ['history.json', 'output/index.html', 'data/weekly_plan.json']
+        before = {name: (self.base / name).read_bytes() for name in names}
+        pool = update.read_json(self.base / 'data/dinner_pool.json')
+        # 追加取得でも新しい候補が3品しかなければ、旧献立を復活させない。
+        pool['recipes'] += [dict(r, recipe_id='other-' + r['recipe_id']) for r in pool['recipes'][:3]]
+        with patch.object(update, 'BASE_DIR', self.base), \
+                patch.object(update, 'collect', return_value=pool) as collect, \
+                patch.object(update, 'install_artifacts') as install, \
+                patch.object(update, 'git') as git, \
+                patch.object(update, 'fetch_detail') as fetch:
+            self.assertEqual(update.main(['--week-start', '2026-09-28']), 1)
+        self.assertEqual(collect.call_count, 2)
+        install.assert_not_called()
+        git.assert_not_called()
+        fetch.assert_not_called()
+        self.assertEqual({name: (self.base / name).read_bytes() for name in names}, before)
 
     def test_new_week_selects_scales_and_records(self):
         self.write("history.json", [])
@@ -213,9 +241,9 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(egg['display'], '2個')
 
     def test_four_week_shortage_preserves_existing_html_and_history(self):
-        # 27日前のIDは、当週の再抽選でも復活させない。
+        # 27日前のIDは、初回生成でも復活させない。
         old = dict(self.history[0], date="2026-09-01")
-        history = [old] + self.history
+        history = [old]
         self.write("history.json", history)
         with self.assertRaisesRegex(ValueError, "そろいません"):
             self.prepare()
@@ -245,7 +273,12 @@ class UpdateTests(unittest.TestCase):
     def test_partial_history_regenerated_without_saved_plan(self):
         self.write("history.json", self.history[:1])
         (self.base / "data/weekly_plan.json").unlink()
+        pool = update.read_json(self.base / 'data/dinner_pool.json')
+        pool['recipes'].append(dict(pool['recipes'][0], recipe_id='extra'))
+        self.write('data/dinner_pool.json', pool)
         artifacts, _ = self.prepare()
+        self.assertNotIn(self.history[0]['recipe_id'],
+                         {r['recipe_id'] for r in json.loads(artifacts['history.json'])})
         self.assertEqual(len(json.loads(artifacts["history.json"])), 4)
 
     def test_transaction_rolls_back_mid_write_and_keeps_backup(self):
@@ -268,6 +301,23 @@ class UpdateTests(unittest.TestCase):
                     self.fail("second run should be blocked")
         with update.update_lock(self.base):
             pass
+
+    def test_open_uses_chrome_for_local_and_public_pages(self):
+        for destination in ['file:///F:/menu/index.html', 'https://example.com/?update=123']:
+            with self.subTest(destination=destination), \
+                    patch.object(Path, 'is_file', return_value=True), \
+                    patch.object(update.subprocess, 'Popen') as launch:
+                self.assertTrue(update.open_in_chrome(destination))
+                command = launch.call_args.args[0]
+                self.assertEqual(Path(command[0]).name, 'chrome.exe')
+                self.assertEqual(command[1], destination)
+                self.assertEqual(len(command), 2)
+
+    def test_missing_chrome_does_not_launch_another_browser(self):
+        with patch.object(Path, 'is_file', return_value=False), \
+                patch.object(update.subprocess, 'Popen') as launch:
+            self.assertFalse(update.open_in_chrome('file:///F:/menu/index.html'))
+        launch.assert_not_called()
 
     def test_publish_uses_only_allowlisted_files(self):
         commands = []

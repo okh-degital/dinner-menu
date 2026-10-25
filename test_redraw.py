@@ -13,19 +13,48 @@ from test_plan_week import MONDAY, DAYS, candidate, report, entry
 
 
 class RedrawTests(unittest.TestCase):
-    def test_repeated_week_changes_set_and_retains_other_weeks(self):
-        data = report(*(candidate(str(i)) for i in range(6)))
+    def test_repeated_week_never_returns_to_earlier_set(self):
+        data = report(*(candidate(str(i)) for i in range(16)))
         old = [entry(MONDAY - timedelta(days=14), 'old'), entry(MONDAY + timedelta(days=14), 'future')]
-        history = old[:]
-        previous = None
-        for _ in range(8):
-            plan = build_plan(data, history, DAYS, MONDAY)
+        history, previous_plan, shown = old[:], None, set()
+        for _ in range(4):
+            plan = build_plan(data, history, DAYS, MONDAY, previous_plan=previous_plan)
+            self.assertEqual(plan["status"], "draft_ready")
             chosen = {m['recipe']['recipe_id'] for m in plan['meals']}
-            self.assertNotEqual(chosen, previous)
+            self.assertTrue(chosen.isdisjoint(shown))
             history = record_plan(history, plan)
             self.assertEqual(len(history), 6)
             self.assertTrue(all(row in history for row in old))
-            previous = chosen
+            shown |= chosen
+            previous_plan = plan
+        self.assertEqual(len(shown), 16)
+        self.assertEqual(build_plan(data, history, DAYS, MONDAY, previous_plan=plan)['status'], 'insufficient_candidates')
+
+    def test_redraw_blocks_same_id_and_family_alias_with_different_id(self):
+        old = dict(entry(MONDAY, 'old'), title='しょうが焼き')
+        recipes = [dict(candidate('old', score=999), title='別の表記'),
+                   dict(candidate('alias', score=999), title='生姜焼き')]
+        recipes += [candidate(str(i)) for i in range(4)]
+        plan = build_plan(report(*recipes), [old], DAYS, MONDAY)
+        self.assertEqual(plan['status'], 'draft_ready')
+        self.assertEqual({m['recipe']['recipe_id'] for m in plan['meals']}, {'0', '1', '2', '3'})
+        self.assertTrue(all(set(row['recipe_ids']) == {'old', 'alias'}
+                            for row in plan['history_exclusions']))
+
+    def test_other_week_has_only_normal_four_week_exclusion(self):
+        data = report(*(candidate(str(i)) for i in range(8)))
+        first = build_plan(data, [], DAYS, MONDAY)
+        history = record_plan([], first)
+        first_ids = {m['recipe']['recipe_id'] for m in first['meals']}
+        next_week = build_plan(data, history, DAYS, MONDAY + timedelta(weeks=1))
+        self.assertTrue(first_ids.isdisjoint(m['recipe']['recipe_id'] for m in next_week['meals']))
+        # 将来の週・4週間より古い週は追加除外として持ち越さない。
+        first_only = report(*(m['recipe'] for m in first['meals']))
+        for start in [MONDAY - timedelta(weeks=1), MONDAY + timedelta(weeks=5)]:
+            with self.subTest(start=start):
+                plan = build_plan(first_only, history, DAYS, start)
+                self.assertEqual(plan['status'], 'draft_ready')
+                self.assertEqual({m['recipe']['recipe_id'] for m in plan['meals']}, first_ids)
 
     def test_week_replacement_removes_old_offday_and_crosses_month(self):
         history = [entry(date(2026, 10, 1), 'obsolete'), entry(date(2026, 9, 27), 'keep')]

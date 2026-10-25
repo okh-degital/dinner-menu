@@ -148,7 +148,7 @@ class WeekPlanTests(unittest.TestCase):
             build_plan(data, [], DAYS, MONDAY + timedelta(days=1))
         with self.assertRaises(ValueError):
             build_plan(data, [], ["月", "月"], MONDAY)
-        self.assertEqual(build_plan(data, [entry(MONDAY, "A")], ["月"], MONDAY)["status"], "draft_ready")
+        self.assertEqual(build_plan(data, [entry(MONDAY, "A")], ["月"], MONDAY)["status"], "insufficient_candidates")
 
 
 if __name__ == "__main__":

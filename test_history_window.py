@@ -27,7 +27,7 @@ class FourWeekHistoryTests(unittest.TestCase):
         self.assertEqual(history, original)
 
     def test_inclusive_boundaries_and_current_future_weeks(self):
-        for offset, blocked in [(-29, False), (-28, True), (-1, True), (0, False), (6, False), (7, False)]:
+        for offset, blocked in [(-29, False), (-28, True), (-1, True), (0, True), (6, True), (7, False)]:
             for weekday in DAYS:
                 with self.subTest(offset=offset, weekday=weekday):
                     history = [entry(START + timedelta(days=offset), 'A')]
@@ -58,12 +58,15 @@ class FourWeekHistoryTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, '直前4週間'):
                         record_plan([old], plan)
 
-    def test_family_allowed_before_window_and_current_week_rerun(self):
+    def test_family_allowed_before_window_but_blocked_on_current_week_rerun(self):
         new = dict(candidate('new'), title='生姜焼き')
         for day in [date(2026, 9, 13), START, START + timedelta(days=6)]:
             with self.subTest(day=day):
                 old = dict(entry(day, 'old'), title='しょうが焼き')
                 plan = build_plan(report(new), [old], ['金'], START)
+                if day >= START:
+                    self.assertEqual(plan['status'], 'insufficient_candidates')
+                    continue
                 self.assertEqual(plan['status'], 'draft_ready')
                 updated = record_plan([old], plan)
                 self.assertEqual(len(updated), 2 if day < START else 1)
