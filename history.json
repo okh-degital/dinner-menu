@@ -114,42 +114,41 @@
   {
     "date": "2026-10-26",
     "source": "rakuten_recipe",
-    "recipe_id": "1580041270",
-    "title": "簡単おつまみ＊屋台風イカ焼き",
+    "recipe_id": "1870018846",
+    "title": "焼くだけおつまみ♡ぶりのあらの塩焼き",
     "status": "planned",
     "categories": [
-      "いか"
+      "ぶり"
     ]
   },
   {
     "date": "2026-10-27",
     "source": "rakuten_recipe",
-    "recipe_id": "1510016881",
-    "title": "簡単すぎる♫けど美味しい♫ふわトロ天津飯",
+    "recipe_id": "1280023259",
+    "title": "ふっくらやわらか★茹で鯖",
     "status": "planned",
     "categories": [
-      "丼物"
+      "さば"
     ]
   },
   {
     "date": "2026-10-28",
     "source": "rakuten_recipe",
-    "recipe_id": "1670008437",
-    "title": "水切りなし♡豆腐でボリューム♡ふわふわ鶏つくね",
+    "recipe_id": "1840046548",
+    "title": "レンジで簡単♪豚肉のきのこ巻きポン酢",
     "status": "planned",
     "categories": [
-      "大豆・豆腐",
-      "肉"
+      "豚薄切り肉"
     ]
   },
   {
     "date": "2026-10-30",
     "source": "rakuten_recipe",
-    "recipe_id": "1420011433",
-    "title": "子供も大好き♡タラのムニエル",
+    "recipe_id": "1990028291",
+    "title": "肉なしヘルシー、しょっつる擬製豆腐",
     "status": "planned",
     "categories": [
-      "たら"
+      "木綿豆腐"
     ]
   }
 ]
