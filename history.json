@@ -114,41 +114,41 @@
   {
     "date": "2026-10-26",
     "source": "rakuten_recipe",
-    "recipe_id": "1670016370",
-    "title": "おうちで居酒屋さんの味‼︎おいしい手羽先の唐揚げ",
+    "recipe_id": "1510019635",
+    "title": "ぷりぷり★海老シュウマイ",
     "status": "planned",
     "categories": [
-      "手羽先"
+      "魚"
     ]
   },
   {
     "date": "2026-10-27",
     "source": "rakuten_recipe",
-    "recipe_id": "1760011898",
-    "title": "合挽き肉とかぼちゃの甘辛煮＋＋",
+    "recipe_id": "1290045595",
+    "title": "粗挽き肉のコンソメソース丼",
     "status": "planned",
     "categories": [
-      "合い挽き肉"
+      "豚ひき肉"
     ]
   },
   {
     "date": "2026-10-28",
     "source": "rakuten_recipe",
-    "recipe_id": "1920004913",
-    "title": "ふっくら♪和風ピーマンの肉詰め",
+    "recipe_id": "1460032641",
+    "title": "【離乳食完了期】タラのムニエル",
     "status": "planned",
     "categories": [
-      "合い挽き肉"
+      "たら"
     ]
   },
   {
     "date": "2026-10-30",
     "source": "rakuten_recipe",
-    "recipe_id": "1860003944",
-    "title": "フライパンひとつで作るアジの簡単照り焼き♪",
+    "recipe_id": "1720001297",
+    "title": "マヨった時は、フライパン1つの「マヨチキン」",
     "status": "planned",
     "categories": [
-      "あじ"
+      "鶏むね肉"
     ]
   }
 ]
