@@ -114,41 +114,41 @@
   {
     "date": "2026-10-26",
     "source": "rakuten_recipe",
-    "recipe_id": "1870018846",
-    "title": "焼くだけおつまみ♡ぶりのあらの塩焼き",
+    "recipe_id": "1360001604",
+    "title": "揚げないけどやわらか！ささみのフライ",
     "status": "planned",
     "categories": [
-      "ぶり"
+      "ささみ"
     ]
   },
   {
     "date": "2026-10-27",
     "source": "rakuten_recipe",
-    "recipe_id": "1280023259",
-    "title": "ふっくらやわらか★茹で鯖",
+    "recipe_id": "1640007445",
+    "title": "鶏手羽元の照り煮　圧力鍋で簡単に。",
     "status": "planned",
     "categories": [
-      "さば"
+      "手羽元"
     ]
   },
   {
     "date": "2026-10-28",
     "source": "rakuten_recipe",
-    "recipe_id": "1840046548",
-    "title": "レンジで簡単♪豚肉のきのこ巻きポン酢",
+    "recipe_id": "1830003033",
+    "title": "Kタッキー風☆手羽元フライドチキン",
     "status": "planned",
     "categories": [
-      "豚薄切り肉"
+      "手羽元"
     ]
   },
   {
     "date": "2026-10-30",
     "source": "rakuten_recipe",
-    "recipe_id": "1990028291",
-    "title": "肉なしヘルシー、しょっつる擬製豆腐",
+    "recipe_id": "1390016317",
+    "title": "給食の味！ささみのレモン煮",
     "status": "planned",
     "categories": [
-      "木綿豆腐"
+      "ささみ"
     ]
   }
 ]
