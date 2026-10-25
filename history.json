@@ -114,29 +114,41 @@
   {
     "date": "2026-10-26",
     "source": "rakuten_recipe",
-    "recipe_id": "1120024654",
-    "title": "簡単☆もずく丼",
-    "status": "planned"
+    "recipe_id": "1720051456",
+    "title": "☆厚揚げで簡単☆カリカリ揚げ出し豆腐",
+    "status": "planned",
+    "categories": [
+      "厚揚げ"
+    ]
   },
   {
     "date": "2026-10-27",
     "source": "rakuten_recipe",
-    "recipe_id": "1210010996",
-    "title": "太刀魚の煮付け",
-    "status": "planned"
+    "recipe_id": "1950020368",
+    "title": "玉ねぎと豚バラ薄切り肉で、スタミナ豚丼♪",
+    "status": "planned",
+    "categories": [
+      "豚薄切り肉"
+    ]
   },
   {
     "date": "2026-10-28",
     "source": "rakuten_recipe",
-    "recipe_id": "1950014072",
-    "title": "カジカの卵の醤油漬け(いくらも同じ漬け方です)",
-    "status": "planned"
+    "recipe_id": "1720001297",
+    "title": "マヨった時は、フライパン1つの「マヨチキン」",
+    "status": "planned",
+    "categories": [
+      "鶏むね肉"
+    ]
   },
   {
     "date": "2026-10-30",
     "source": "rakuten_recipe",
-    "recipe_id": "1460051650",
-    "title": "節約料理♪厚揚げともやしのキムチ炒め",
-    "status": "planned"
+    "recipe_id": "1210008754",
+    "title": "＜居酒屋再現＞燻製サバの大人ポテサラ〜おつまみに！",
+    "status": "planned",
+    "categories": [
+      "さば"
+    ]
   }
 ]
