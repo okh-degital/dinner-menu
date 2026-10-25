@@ -114,41 +114,41 @@
   {
     "date": "2026-10-26",
     "source": "rakuten_recipe",
-    "recipe_id": "1210010996",
-    "title": "太刀魚の煮付け",
+    "recipe_id": "1860004400",
+    "title": "圧力鍋で時短！手羽元と大根のこってり煮♪",
     "status": "planned",
     "categories": [
-      "魚"
+      "手羽元"
     ]
   },
   {
     "date": "2026-10-27",
     "source": "rakuten_recipe",
-    "recipe_id": "1460051650",
-    "title": "節約料理♪厚揚げともやしのキムチ炒め",
+    "recipe_id": "1090053791",
+    "title": "今日は、豚バラ肉とキムチのみ♬簡単！！豚キムチ",
     "status": "planned",
     "categories": [
-      "大豆・豆腐"
+      "豚バラ肉"
     ]
   },
   {
     "date": "2026-10-28",
     "source": "rakuten_recipe",
-    "recipe_id": "1950014072",
-    "title": "カジカの卵の醤油漬け(いくらも同じ漬け方です)",
+    "recipe_id": "1880011396",
+    "title": "ドンキー風 簡単♡イカの箱舟",
     "status": "planned",
     "categories": [
-      "魚"
+      "いか"
     ]
   },
   {
     "date": "2026-10-30",
     "source": "rakuten_recipe",
-    "recipe_id": "1120024654",
-    "title": "簡単☆もずく丼",
+    "recipe_id": "1720045046",
+    "title": "白身魚の天ぷら",
     "status": "planned",
     "categories": [
-      "丼物"
+      "たら"
     ]
   }
 ]
