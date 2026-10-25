@@ -114,41 +114,41 @@
   {
     "date": "2026-10-26",
     "source": "rakuten_recipe",
-    "recipe_id": "1510019635",
-    "title": "ぷりぷり★海老シュウマイ",
+    "recipe_id": "1430005443",
+    "title": "安い肉も絶対美味しくなる☆魔法の焼肉丼！",
     "status": "planned",
     "categories": [
-      "魚"
+      "牛肉"
     ]
   },
   {
     "date": "2026-10-27",
     "source": "rakuten_recipe",
-    "recipe_id": "1290045595",
-    "title": "粗挽き肉のコンソメソース丼",
+    "recipe_id": "1620024740",
+    "title": "子どもがパクリ！アジの竜田揚げ",
     "status": "planned",
     "categories": [
-      "豚ひき肉"
+      "あじ"
     ]
   },
   {
     "date": "2026-10-28",
     "source": "rakuten_recipe",
-    "recipe_id": "1460032641",
-    "title": "【離乳食完了期】タラのムニエル",
+    "recipe_id": "1200000815",
+    "title": "簡単すぎ？フライパン一つの揚げ出し豆腐",
     "status": "planned",
     "categories": [
-      "たら"
+      "木綿豆腐"
     ]
   },
   {
     "date": "2026-10-30",
     "source": "rakuten_recipe",
-    "recipe_id": "1720001297",
-    "title": "マヨった時は、フライパン1つの「マヨチキン」",
+    "recipe_id": "1620000224",
+    "title": "あんかけ★擬製豆腐",
     "status": "planned",
     "categories": [
-      "鶏むね肉"
+      "木綿豆腐"
     ]
   }
 ]
