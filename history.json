@@ -154,41 +154,42 @@
   {
     "date": "2026-11-02",
     "source": "rakuten_recipe",
-    "recipe_id": "1860003944",
-    "title": "フライパンひとつで作るアジの簡単照り焼き♪",
+    "recipe_id": "1880011396",
+    "title": "ドンキー風 簡単♡イカの箱舟",
     "status": "planned",
     "categories": [
-      "あじ"
+      "いか"
     ]
   },
   {
     "date": "2026-11-03",
     "source": "rakuten_recipe",
-    "recipe_id": "1990051694",
-    "title": "爽やか生姜タルタルソースDEサーモンムニエル",
+    "recipe_id": "1720046359",
+    "title": "圧力鍋で♪鶏ももと大根の煮物",
     "status": "planned",
     "categories": [
-      "魚"
+      "鶏もも肉"
     ]
   },
   {
     "date": "2026-11-04",
     "source": "rakuten_recipe",
-    "recipe_id": "1400011558",
-    "title": "カリカリ甘辛厚揚げ",
+    "recipe_id": "1560010142",
+    "title": "里芋と鶏肉の煮物♪",
     "status": "planned",
     "categories": [
-      "厚揚げ"
+      "鶏もも肉"
     ]
   },
   {
     "date": "2026-11-06",
     "source": "rakuten_recipe",
-    "recipe_id": "1850021161",
-    "title": "【楽めし】豚丼",
+    "recipe_id": "1670008437",
+    "title": "水切りなし♡豆腐でボリューム♡ふわふわ鶏つくね",
     "status": "planned",
     "categories": [
-      "丼物"
+      "大豆・豆腐",
+      "肉"
     ]
   }
 ]
