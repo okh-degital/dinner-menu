@@ -154,41 +154,41 @@
   {
     "date": "2026-11-02",
     "source": "rakuten_recipe",
-    "recipe_id": "1510019632",
-    "title": "★鶏ムネ肉の柔らか甘辛チキン★",
+    "recipe_id": "1860003944",
+    "title": "フライパンひとつで作るアジの簡単照り焼き♪",
     "status": "planned",
     "categories": [
-      "肉"
+      "あじ"
     ]
   },
   {
     "date": "2026-11-03",
     "source": "rakuten_recipe",
-    "recipe_id": "1430021056",
-    "title": "離乳食完了期☆1歳からの豚肉ハンバーグ＆豚つくね",
+    "recipe_id": "1990051694",
+    "title": "爽やか生姜タルタルソースDEサーモンムニエル",
     "status": "planned",
     "categories": [
-      "豚ひき肉"
+      "魚"
     ]
   },
   {
     "date": "2026-11-04",
     "source": "rakuten_recipe",
-    "recipe_id": "1430005443",
-    "title": "安い肉も絶対美味しくなる☆魔法の焼肉丼！",
+    "recipe_id": "1400011558",
+    "title": "カリカリ甘辛厚揚げ",
     "status": "planned",
     "categories": [
-      "牛肉"
+      "厚揚げ"
     ]
   },
   {
     "date": "2026-11-06",
     "source": "rakuten_recipe",
-    "recipe_id": "1280023259",
-    "title": "ふっくらやわらか★茹で鯖",
+    "recipe_id": "1850021161",
+    "title": "【楽めし】豚丼",
     "status": "planned",
     "categories": [
-      "さば"
+      "丼物"
     ]
   }
 ]
