@@ -191,5 +191,45 @@
       "大豆・豆腐",
       "肉"
     ]
+  },
+  {
+    "date": "2026-11-09",
+    "source": "rakuten_recipe",
+    "recipe_id": "1050010995",
+    "title": "プロ直伝！ニラともやしの卵炒め",
+    "status": "planned",
+    "categories": [
+      "卵料理"
+    ]
+  },
+  {
+    "date": "2026-11-10",
+    "source": "rakuten_recipe",
+    "recipe_id": "1390032207",
+    "title": "手抜きでも簡単美味しい！ぷりぷり海老マヨ！！！",
+    "status": "planned",
+    "categories": [
+      "魚"
+    ]
+  },
+  {
+    "date": "2026-11-11",
+    "source": "rakuten_recipe",
+    "recipe_id": "1720051456",
+    "title": "☆厚揚げで簡単☆カリカリ揚げ出し豆腐",
+    "status": "planned",
+    "categories": [
+      "大豆・豆腐"
+    ]
+  },
+  {
+    "date": "2026-11-13",
+    "source": "rakuten_recipe",
+    "recipe_id": "1120024654",
+    "title": "簡単☆もずく丼",
+    "status": "planned",
+    "categories": [
+      "丼物"
+    ]
   }
 ]
