@@ -5,7 +5,7 @@ import unittest
 from fractions import Fraction
 from pathlib import Path
 
-from build_shopping import assemble, amount_text, generate_page, render_html, render_markdown, scale_ingredients
+from build_shopping import assemble, amount_text, generate_page, redraw_data, render_html, render_markdown, scale_ingredients
 
 BASE = Path(__file__).resolve().parent
 
@@ -139,6 +139,32 @@ class ShoppingTests(unittest.TestCase):
         self.assertIn('&lt;script&gt;bad()', html)
         self.assertEqual(html.count('<article>'), 4)
         self.assertIn('noindex, nofollow', html)
+
+    def test_redraw_uses_candidate_status_and_existing_portions(self):
+        plan = copy.deepcopy(self.plan)
+        for meal in plan["meals"]:
+            meal["recipe"]["ingredient_names"] = ["鶏肉"]
+        alternative = dict(plan["meals"][0]["recipe"], recipe_id="extra", status="candidate",
+                           title="別の料理</script>", ingredient_names=["玉ねぎ"])
+        report = {"recipes": [alternative, dict(alternative, recipe_id="hold", status="hold")]}
+        plan["history_exclusions"] = [{"date": plan["meals"][0]["date"], "recipe_ids": ["extra"]}]
+        data = redraw_data(plan, report, self.details, [], {})
+        self.assertEqual(set(data["catalog"]), {"1", "2", "3", "4", "extra"})
+        self.assertEqual(data["excluded"], [["extra"], [], [], []])
+        self.assertEqual(data["catalog"]["extra"]["ingredients"][0]["unknown"], ["不明"])
+        shrimp = data["catalog"]["2"]["ingredients"][0]
+        self.assertEqual(Fraction(int(shrimp["amounts"]["g"]), int(data["denominator"])), 300)
+        self.assertIn("&lt;/script&gt;", data["catalog"]["extra"]["body"])
+
+    def test_optional_bad_detail_does_not_break_weekly_page(self):
+        plan = copy.deepcopy(self.plan)
+        for meal in plan["meals"]:
+            meal["recipe"]["ingredient_names"] = ["豆腐"]
+        bad = dict(self.details["recipes"][0], recipe_id="other", source_url="https://example.invalid/")
+        alternative = dict(plan["meals"][0]["recipe"], recipe_id="other", status="candidate")
+        data = redraw_data(plan, {"recipes": [alternative]}, {"recipes": self.details["recipes"] + [bad]}, [], {})
+        self.assertEqual(data["original"], ["1", "2", "3", "4"])
+        self.assertEqual(data["catalog"]["other"]["ingredients"][0]["unknown"], ["不明"])
 
     def test_invalid_input_preserves_previous_output(self):
         with tempfile.TemporaryDirectory() as directory:

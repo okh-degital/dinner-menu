@@ -1,6 +1,8 @@
 """確認済みの元分量を人数換算し、買い物リスト付きの献立プレビューを生成。"""
 
+import hashlib
 import json
+import math
 import re
 import unicodedata
 import sys
@@ -11,6 +13,12 @@ from pathlib import Path
 from string import Template
 from urllib.parse import urlsplit
 
+from plan_week import (food_group, history_variety_counts, outside_week, parse_date,
+                       variety_limits)
+from select_dinner import meal_preferences
+from food_prices import price_settings
+
+PUBLIC_URL = "https://okh-degital.github.io/dinner-menu/"
 BASE_DIR = Path(__file__).resolve().parent
 UNITS = {"g", "ml", "個", "枚", "束", "袋", "本", "丁", "大さじ", "小さじ",
          "切れ", "尾", "匹", "片", "パック", "玉", "房", "合", "カップ", "人分",
@@ -155,29 +163,86 @@ def source_servings_text(meal):
     return f"{value}人分" if type(value) is int and value > 0 else "人数不明"
 
 
-def render_html(data, template):
+def meal_body(meal, servings):
+    checked_label = "元レシピ取得" if meal.get("automatically_read") else "分量確認"
+    checked = f' {checked_label}：{escape(meal["verified_on"])}' if meal.get("verified_on") else ""
+    items = "".join(f"<li>{escape(i['name'])}：{escape(i['display'])}</li>" for i in meal["ingredients"])
+    if not items:
+        items = "<li>材料・分量：不明（元レシピをご確認ください）</li>"
+    notes = "".join(f'<p class="note">{escape(note)}</p>' for note in meal["notes"])
+    notes += "".join(f'<p class="note">選んだ理由：{escape(reason)}</p>' for reason in meal.get("price_reasons", []))
+    return (f'<h2>{escape(meal["title"])}</h2><h3>材料（{servings}人分）</h3><ul>{items}</ul>'
+             f'<p class="note">元レシピは{source_servings_text(meal)}。{checked}</p>'
+             f'{notes}<p><a href="{escape(meal["source_url"], quote=True)}" target="_blank" rel="noopener noreferrer">'
+             '楽天レシピで作り方を見る</a></p>'
+             f'<p class="note">レシピ提供：{escape(meal["author"])}</p>')
+
+
+def redraw_data(plan, report, details, history, settings):
+    """Embed only classified main dishes, scaled ingredients and remaining variety limits."""
+    days = plan["meals"]
+    recipes = {r["recipe_id"]: r for r in report["recipes"] if r.get("status") == "candidate"}
+    original = [day["recipe"]["recipe_id"] for day in days]
+    for key, day in zip(original, days):
+        recipes[key] = {**recipes.get(key, {}), **day["recipe"]}
+    preferences = meal_preferences(settings)
+    counts = history_variety_counts(outside_week(history, parse_date(plan["week_start"])), preferences)
+    excluded = {row["date"]: set(row["recipe_ids"]) for row in plan.get("history_exclusions", [])}
+    catalog = {}
+    denominator = 1
+    for key, recipe in recipes.items():
+        one_day = dict(plan, meals=[dict(days[0], recipe=recipe)])
+        try:
+            data = assemble(one_day, details)
+        except (TypeError, KeyError, ValueError):
+            # An unusable detail for an optional dish should not abort the weekly update.
+            if key in original:
+                raise
+            data = assemble(one_day, {"recipes": []})
+        ingredients = []
+        for item in data["shopping"]:
+            amounts = {unit: Fraction(value) for unit, value in item["quantities"].items()}
+            denominator = math.lcm(denominator, *(q.denominator for q in amounts.values()))
+            ingredients.append({"name": item["name"], "amounts": amounts, "approx": item["approximate"],
+                                "unknown": [row["note"] for row in item["as_needed"]]})
+        rules = []
+        for day in days:
+            limits = variety_limits(recipe, parse_date(day["date"]), preferences)
+            rules.append({"/".join(k): limit - counts[k] for k, limit in limits.items()})
+        catalog[key] = {"body": meal_body(data["meals"][0], plan["target_servings"]),
+                        "ingredients": ingredients, "rules": rules,
+                        "group": food_group(recipe), "primary": recipe.get("main_ingredients", []),
+                        "score": recipe.get("score", 0)}
+    # Integer multiples of a common fraction keep browser totals exact.
+    for entry in catalog.values():
+        for item in entry["ingredients"]:
+            item["amounts"] = {unit: str(q * denominator) for unit, q in item["amounts"].items()}
+    return {"week": plan["week_start"], "generated": plan.get("source_fetched_at"),
+            "days": [day["weekday"] for day in days],
+            "original": original,
+            "excluded": [sorted(excluded.get(day["date"], ())) for day in days],
+            "mainLimit": price_settings(settings)["same_main_ingredient_limit"],
+            "denominator": str(denominator), "catalog": catalog}
+
+
+def render_html(data, template, redraw=None):
     cards, shopping = [], []
     for meal in data["meals"]:
-        checked_label = "元レシピ取得" if meal.get("automatically_read") else "分量確認"
-        checked = f' {checked_label}：{escape(meal["verified_on"])}' if meal.get("verified_on") else ""
-        items = "".join(f"<li>{escape(i['name'])}：{escape(i['display'])}</li>" for i in meal["ingredients"])
-        if not items:
-            items = "<li>材料・分量：不明（元レシピをご確認ください）</li>"
-        notes = "".join(f'<p class="note">{escape(note)}</p>' for note in meal["notes"])
-        notes += "".join(f'<p class="note">選んだ理由：{escape(reason)}</p>' for reason in meal.get("price_reasons", []))
         cards.append(f'<article><span class="day">{escape(meal["date"])}（{escape(meal["weekday"])}）</span>'
-                     f'<h2>{escape(meal["title"])}</h2><h3>材料（{data["target_servings"]}人分）</h3><ul>{items}</ul>'
-                     f'<p class="note">元レシピは{source_servings_text(meal)}。{checked}</p>'
-                     f'{notes}<p><a href="{escape(meal["source_url"], quote=True)}" target="_blank" rel="noopener noreferrer">'
-                     '楽天レシピで作り方を見る</a></p>'
-                     f'<p class="note">レシピ提供：{escape(meal["author"])}</p></article>')
+                     f'<div class="recipe">{meal_body(meal, data["target_servings"])}</div></article>')
     for item in data["shopping"]:
         extra = " / ".join(i["weekday"] + "：" + i["note"] for i in item["as_needed"])
         key = escape(json.dumps([item["name"], item["quantities"], item["as_needed"]], ensure_ascii=False), quote=True)
         shopping.append(f'<li><label><input type="checkbox" data-key="{key}"><span>{escape(item["name"])}：'
                         f'{escape(item["display"])}'
                         + (f'<small class="note">{escape(extra)}</small>' if extra else "") + '</span></label></li>')
+    payload = json.dumps(redraw, ensure_ascii=True, separators=(",", ":")).replace("<", "\\u003c")
     return Template(template).substitute(
+        public_url=PUBLIC_URL,
+        qr_script=(BASE_DIR / "templates/qrcode.js").read_text(encoding="utf-8") if redraw else "",
+        redraw_json=payload,
+        redraw_script=(BASE_DIR / "templates/weekly.js").read_text(encoding="utf-8"),
+        edition=hashlib.sha256(payload.encode()).hexdigest()[:24],
         page_heading=f'{data["week_start"]}週の夕飯',
         page_intro=f'{data["target_servings"]}人分・主菜{len(data["meals"])}日分。換算できる材料だけ比例換算しています。人数・分量が読み取れない材料は「不明」です。調理時は元レシピをご確認ください。',
         meal_cards="\n".join(cards), shopping_items="\n".join(shopping))
@@ -202,7 +267,16 @@ def generate_page(base_dir=BASE_DIR):
     details = json.loads((base_dir / "data/recipe_details.json").read_text(encoding="utf-8-sig"))
     data = assemble(plan, details)
     template = (base_dir / "templates/weekly.html").read_text(encoding="utf-8")
-    html, markdown = render_html(data, template), render_markdown(data)
+    report_path = base_dir / "data/dinner_candidates.json"
+    redraw = None
+    if all(path.exists() for path in (report_path, base_dir / "history.json", base_dir / "settings.json")):
+        def read(path):
+            return json.loads(path.read_text(encoding="utf-8-sig"))
+        report = read(report_path)
+        if report.get("source_fetched_at") == plan.get("source_fetched_at"):
+            redraw = redraw_data(plan, report, details, read(base_dir / "history.json"),
+                                 read(base_dir / "settings.json"))
+    html, markdown = render_html(data, template, redraw), render_markdown(data)
     output = base_dir / "output/weekly-preview.html"
     output.parent.mkdir(exist_ok=True)
     # 全件の検証と描画が成功してから保存する。

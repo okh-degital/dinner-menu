@@ -15,14 +15,13 @@ import time
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from build_shopping import assemble, render_html, render_markdown, source_link, unknown_detail
+from build_shopping import PUBLIC_URL, assemble, redraw_data, render_html, render_markdown, source_link, unknown_detail
 from food_prices import load_prices, price_settings, render_report, score_recipe
 from plan_week import DAY_OFFSETS, build_plan, parse_date, record_plan, validate_history, write_preview
 from recipe_details import fetch_detail
 from select_dinner import classify, collect, meal_preferences, render_candidates
 
 BASE_DIR = Path(__file__).resolve().parent
-PUBLIC_URL = "https://okh-degital.github.io/dinner-menu/"
 REPOSITORY = "okh-degital/dinner-menu"
 PUBLISH_FILES = ("output/index.html", "history.json")
 EXTRA_CATEGORIES = ("鶏むね肉", "豚薄切り肉", "鮭", "さば", "厚揚げ")
@@ -174,7 +173,8 @@ def prepare(base, work, start, today, cached=False):
     updated_history = record_plan(history, plan, preferences)
     details["recipes"] = list(lookup.values())
     shopping = assemble(plan, details)
-    html = render_html(shopping, (base / "templates/weekly.html").read_text(encoding="utf-8"))
+    redraw = redraw_data(plan, report, details, history, settings)
+    html = render_html(shopping, (base / "templates/weekly.html").read_text(encoding="utf-8"), redraw)
     marker = hashlib.sha256(html.encode("utf-8")).hexdigest()
     html = html.replace("</head>", f'<meta name="dinner-build" content="{marker}">\n</head>', 1)
     write_preview(work / "data/weekly_plan.md", plan)

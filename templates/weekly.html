@@ -23,17 +23,38 @@
     input[type="checkbox"] { width: 22px; height: 22px; flex-shrink: 0; accent-color: #486b39; }
     input:checked + span { text-decoration: line-through; color: #757575; }
     button { background: #fff; color: #29382c; border: 1px solid #87977d; border-radius: 8px; padding: 12px 18px; font: inherit; cursor: pointer; }
+    .week-header { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 28px; }
+    .week-intro { flex: 1 1 320px; }
+    #share { padding: 8px 14px; border: 1px solid #dde3d8; border-radius: 12px; background: white; }
+    #share summary { cursor: pointer; padding: 6px 0; font-weight: bold; }
+    #share canvas { display: block; margin: 0 auto; width: min(100%, 216px); height: auto; image-rendering: pixelated; }
+    #share input { width: 100%; font: inherit; }
+    #share-status:empty { display: none; }
+    .change-meal { min-height: 48px; margin-top: 8px; }
+    @media (max-width: 540px) { .change-meal { width: 100%; } }
     small { display: block; font-size: .85rem; } a { color: #355c28; }
     :focus-visible { outline: 3px solid #476e34; outline-offset: 3px; }
   </style>
 </head>
 <body>
   <main>
-    <h1>$page_heading</h1>
-    <p class="note">$page_intro</p>
+    <header class="week-header">
+      <div class="week-intro">
+        <h1>$page_heading</h1>
+        <p class="note">$page_intro</p>
+      </div>
+      <details id="share" hidden data-public-url="$public_url">
+        <summary>献立をスマホに共有</summary>
+        <canvas id="share-qr" role="img" aria-label="この4品をスマホで開くQRコード"></canvas>
+        <button type="button" id="copy-share">共有URLをコピー</button>
+        <input id="share-url" type="url" aria-label="共有URL" readonly hidden>
+        <small role="status" id="share-status"></small>
+      </details>
+    </header>
     <section class="meals" aria-label="曜日ごとの献立">
       $meal_cards
     </section>
+    <p class="note" id="change-status" role="status"></p>
     <section class="shopping" aria-labelledby="shopping-heading">
       <h2 id="shopping-heading">買い物リスト</h2>
       <p class="note">献立に使う材料の必要量です。家にあるものはチェックしてください。丼物などレシピ内のご飯は含み、別添えのご飯・副菜は含みません。数量を確定できない材料（適量・少々・少量などを含む）は「不明」と表示します。数値が分かる分と混在する場合は「1個＋不明」のように併記します。</p>
@@ -49,33 +70,10 @@
     <a href="https://developers.rakuten.com/" target="_blank">Supported by Rakuten Developers</a>
     <!-- Rakuten Web Services Attribution Snippet TO HERE -->
   </main>
+  <script type="application/json" id="redraw" data-edition="$edition">$redraw_json</script>
   <script>
-    const boxes = Array.from(document.querySelectorAll('.checklist input'));
-    // 献立や数量が変わったときは、以前のチェックを引き継がない。
-    const signature = document.querySelector('.meals').textContent.replace(/\s+/g, ' ').trim()
-      + JSON.stringify(boxes.map(box => box.dataset.key));
-    const storageKey = 'dinner-shopping-v1:' + signature;
-    const status = document.getElementById('save-status');
-    function storageWarning() {
-      status.textContent = 'このブラウザではチェックを保存できません。ページを閉じるとリセットされます。';
-    }
-    try {
-      const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-      if (saved && typeof saved === 'object') {
-        boxes.forEach(box => { box.checked = saved[box.dataset.key] === true; });
-      }
-    } catch (error) { storageWarning(); }
-    function save() {
-      try {
-        const state = Object.fromEntries(boxes.map(box => [box.dataset.key, box.checked]));
-        localStorage.setItem(storageKey, JSON.stringify(state));
-      } catch (error) { storageWarning(); }
-    }
-    boxes.forEach(box => box.addEventListener('change', save));
-    document.getElementById('reset').addEventListener('click', () => {
-      boxes.forEach(box => { box.checked = false; });
-      save();
-    });
+$qr_script
+$redraw_script
   </script>
 </body>
 </html>
