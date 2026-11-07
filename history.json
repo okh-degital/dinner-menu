@@ -195,41 +195,41 @@
   {
     "date": "2026-11-09",
     "source": "rakuten_recipe",
-    "recipe_id": "1580041270",
-    "title": "簡単おつまみ＊屋台風イカ焼き",
+    "recipe_id": "1400015359",
+    "title": "エビとブロッコリーのガーリック炒め。",
     "status": "planned",
     "categories": [
-      "いか"
+      "魚"
     ]
   },
   {
     "date": "2026-11-10",
     "source": "rakuten_recipe",
-    "recipe_id": "1960018603",
-    "title": "エスニックなチキンクリーム煮",
+    "recipe_id": "1510016881",
+    "title": "簡単すぎる♫けど美味しい♫ふわトロ天津飯",
     "status": "planned",
     "categories": [
-      "鶏もも肉"
+      "丼物"
     ]
   },
   {
     "date": "2026-11-11",
     "source": "rakuten_recipe",
-    "recipe_id": "1440002551",
-    "title": "ふっくらやわらかになる！ブリの照り焼き",
+    "recipe_id": "1270030102",
+    "title": "簡単【キムチとなめ茸の冷奴】",
     "status": "planned",
     "categories": [
-      "ぶり"
+      "木綿豆腐"
     ]
   },
   {
     "date": "2026-11-13",
     "source": "rakuten_recipe",
-    "recipe_id": "1720001297",
-    "title": "マヨった時は、フライパン1つの「マヨチキン」",
+    "recipe_id": "1510019632",
+    "title": "★鶏ムネ肉の柔らか甘辛チキン★",
     "status": "planned",
     "categories": [
-      "鶏むね肉"
+      "肉"
     ]
   }
 ]
